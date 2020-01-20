@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import cfnresponse
 import string
 import boto3
