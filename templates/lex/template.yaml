@@ -381,7 +381,7 @@ Resources:
     Properties:
       ServiceToken: !GetAtt AWSSBInjectedCopyZipsLambda.Arn
       DestBucket: !Ref AWSSBInjectedLambdaZipsBucket
-      SourceBucket: awsservicebrokeralpha
+      SourceBucket: micro-aws-servicebroker-templates
       Prefix: functions/
       Objects:
       - iam_service_linked_role/lambda_function.zip
@@ -410,7 +410,7 @@ Resources:
             Action:
             - s3:GetObject
             Resource:
-            - arn:aws:s3:::awsservicebrokeralpha/*
+            - arn:aws:s3:::micro-aws-servicebroker-templates/*
           - Effect: Allow
             Action:
             - s3:PutObject

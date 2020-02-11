@@ -28,11 +28,7 @@ Pricing: https://aws.amazon.com/elasticache/pricing/
 
 ### Required
 
-At a minimum these parameters must be declared when provisioning an instance of this service
-
-Name           | Description     | Accepted Values
--------------- | --------------- | ---------------
-AccessCidr|CIDR block to allow to connect to database|string
+No parameters must be declared when provisioning an instance of this service
 
 ### Optional
 
@@ -56,7 +52,6 @@ Name           | Description     | Default         | Accepted Values
 target_account_id|AWS Account ID to provision into (optional)||
 target_role_name|IAM Role name to provision with (optional), must be used in combination with target_account_id||
 region|AWS Region to create RDS instance in.|us-west-2|ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ca-central-1, eu-central-1, eu-west-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-west-1, us-west-2
-VpcId|The ID of the VPC to launch the Memcache cluster into||
 
 ### Prescribed
 
@@ -68,11 +63,9 @@ ClusterType|The type of cluster. Specify single-node or multi-node (default).  N
 AllowVersionUpgrade|Indicates that minor engine upgrades will be applied automatically to the cache cluster during the maintenance window. The default value is true.|False
 PortNumber|The port number for the Cluster to listen on|6379
 AZMode|Specifies whether the nodes in this Memcached cluster are created in a single Availability Zone or created across multiple Availability Zones in the cluster's region. This parameter is only supported for Memcached cache clusters. If the AZMode and PreferredAvailabilityZones are not specified, ElastiCache assumes single-az mode.|cross-az
-NumberOfAvailabilityZones|Quantity of subnets to use, if selecting more than 2 the region this stack is in must have at least that many Availability Zones|2
-AvailabilityZones|list of availability zones to use, must be the same quantity as specified in NumberOfAvailabilityZones|Auto
-CidrBlocks|comma seperated list of CIDR blocks to place ElastiCache into, must be the same quantity as specified in NumberOfAvailabilityZones. If auto is specified unused cidr space in the vpc will be used|Auto
-CidrSize|Size of Cidr block to allocate if CidrBlocks is set to Auto.|26
-<a id="param-custom" />
+SubnetName|String to match against existing subnets to place the cache cluster in (glob wildcards allowed).|\*-support-\*
+InboundSGName|Existing Security Group name to allow access to database (glob wildcards allowed).|\*-sgs-eks-workers-\*
+VpcName|The name of the VPC to launch the Memcache cluster into.|\*micro\*
 
 ## custom
 
@@ -86,7 +79,9 @@ At a minimum these parameters must be declared when provisioning an instance of 
 
 Name           | Description     | Accepted Values
 -------------- | --------------- | ---------------
-AccessCidr|CIDR block to allow to connect to database|string
+SubnetName|String to match against existing subnets to place the cache cluster in (glob wildcards allowed).|string
+InboundSGName|Existing Security Group name to allow access to database (glob wildcards allowed).|string
+VpcName|The name of the VPC to launch the Memcache cluster into.|string
 
 ### Optional
 
@@ -118,7 +113,7 @@ Name           | Description     | Default         | Accepted Values
 target_account_id|AWS Account ID to provision into (optional)||
 target_role_name|IAM Role name to provision with (optional), must be used in combination with target_account_id||
 region|AWS Region to create RDS instance in.|us-west-2|ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ca-central-1, eu-central-1, eu-west-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-west-1, us-west-2
-VpcId|The ID of the VPC to launch the Memcache cluster into||
+
 
 <a id="bind-credentials" />
 
@@ -164,7 +159,6 @@ spec:
   clusterServiceClassExternalName: elasticache
   clusterServicePlanExternalName: sign-production
   parameters:
-    AccessCidr: [VALUE] # REQUIRED
     PreferredMaintenanceWindowDay: Mon # OPTIONAL
     PreferredMaintenanceWindowStartTime: 04:00 # OPTIONAL
     PreferredMaintenanceWindowEndTime: 06:00 # OPTIONAL
@@ -186,7 +180,9 @@ spec:
   clusterServiceClassExternalName: elasticache
   clusterServicePlanExternalName: custom
   parameters:
-    AccessCidr: [VALUE] # REQUIRED
+    VpcName: *custom*
+    SubnetName: *support*
+    InboundSGName: *kubernete*
 ```
 
 ### Complete
@@ -199,7 +195,9 @@ spec:
   clusterServiceClassExternalName: elasticache
   clusterServicePlanExternalName: custom
   parameters:
-    AccessCidr: [VALUE] # REQUIRED
+    VpcName: *custom*
+    SubnetName: *support*
+    InboundSGName: *kubernete*
     NumberOfAvailabilityZones: 3 # OPTIONAL
     PreferredMaintenanceWindowDay: Mon # OPTIONAL
     PreferredMaintenanceWindowStartTime: 04:00 # OPTIONAL

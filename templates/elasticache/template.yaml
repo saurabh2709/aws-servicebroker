@@ -22,18 +22,17 @@ Metadata:
       sign-production:
         DisplayName: Production
         Description: Configuration designed for production deployments
-        LongDescription: Creates an Amazon ElastiCache for memcached, optimised for
+        LongDescription: Creates an Amazon ElastiCache for memcached, optimized for
           production use
         Cost: https://aws.amazon.com/elasticache/pricing/
         ParameterValues:
           ClusterType: multi-node
           AllowVersionUpgrade: 'False'
-          PortNumber: '6379'
+          PortNumber: '11211'
           AZMode: cross-az
-          NumberOfAvailabilityZones: '2'
-          AvailabilityZones: Auto
-          CidrBlocks: Auto
-          CidrSize: '26'
+          InboundSGName: '*-sgs-eks-workers-*'
+          SubnetName: '*-support-*'
+          VpcName: "*micro*"
       custom:
         DisplayName: Custom
         Description: Custom Configuration for Advanced deployments
@@ -53,14 +52,11 @@ Metadata:
     - Label:
         default: Network and Security
       Parameters:
-      - VpcId
+      - VpcName
       - PortNumber
       - AZMode
-      - NumberOfAvailabilityZones
-      - AvailabilityZones
-      - CidrBlocks
-      - CidrSize
-      - AccessCidr
+      - InboundSGName
+      - SubnetName
     - Label:
         default: Maintenance
       Parameters:
@@ -77,42 +73,22 @@ Metadata:
         default: Cache Node Type
       AllowVersionUpgrade:
         default: Allow Version Upgrade
-      VpcId:
-        default: Vpc ID
+      VpcName:
+        default: Vpc Name
       PortNumber:
         default: Port Number
       AZMode:
         default: AZ Mode
-      NumberOfAvailabilityZones:
-        default: Number Of Availability Zones
-      AvailabilityZones:
-        default: Availability Zones
-      CidrBlocks:
-        default: CIDR Blocks
-      CidrSize:
-        default: CIDR Size
-      AccessCidr:
-        default: Access CIDR
-      PubliclyAccessible:
-        default: Publicly Accessible
+      InboundSGName:
+        default: Accessing Security Group
       PreferredMaintenanceWindowStartTime:
         default: Preferred MaintenanceWindow Start Time
       PreferredMaintenanceWindowEndTime:
         default: Preferred Maintenance Window End Time
 Parameters:
-  VpcId:
-    Description: The ID of the VPC to launch the Memcache cluster into
-    Type: AWS::EC2::VPC::Id
-  NumberOfAvailabilityZones:
-    Description: Quantity of subnets to use, if selecting more than 2 the region this
-      stack is in must have at least that many Availability Zones
+  VpcName:
+    Description: The name of the VPC to launch the Memcache cluster into
     Type: String
-    Default: '3'
-    AllowedValues:
-    - '2'
-    - '3'
-    - '4'
-    - '5'
   PreferredMaintenanceWindowDay:
     Description: The day of the week which ElastiCache maintenance will be performed
     Type: String
@@ -185,23 +161,13 @@ Parameters:
     - '20:00'
     - '21:00'
     - '22:00'
-  AvailabilityZones:
-    Description: list of availability zones to use, must be the same quantity as specified
-      in NumberOfAvailabilityZones
-    Type: CommaDelimitedList
-    Default: Auto
-  CidrBlocks:
-    Description: comma seperated list of CIDR blocks to place ElastiCache into, must
-      be the same quantity as specified in NumberOfAvailabilityZones. If auto is specified
-      unused cidr space in the vpc will be used
-    Type: CommaDelimitedList
-    Default: Auto
-  CidrSize:
-    Description: Size of Cidr block to allocate if CidrBlocks is set to Auto.
+  SubnetName:
+    Description: String to match against existing subnets to place the cache
+      cluster in (glob wildcards allowed).
     Type: String
-    Default: '26'
-  AccessCidr:
-    Description: CIDR block to allow to connect to database
+  InboundSGName:
+    Description: Existing Security Group name to allow access to database (glob
+      wildcards allowed).
     Type: String
   CacheNodeType:
     Description: The compute and memory capacity of nodes in a cache cluster.
@@ -272,45 +238,10 @@ Parameters:
     - single-az
     - cross-az
 Conditions:
-  3az:
-    !Or
-    - !Equals
-      - !Ref NumberOfAvailabilityZones
-      - '3'
-    - !Equals
-      - !Ref NumberOfAvailabilityZones
-      - '4'
-    - !Equals
-      - !Ref NumberOfAvailabilityZones
-      - '5'
-  4az:
-    !Or
-    - !Equals
-      - !Ref NumberOfAvailabilityZones
-      - '4'
-    - !Equals
-      - !Ref NumberOfAvailabilityZones
-      - '5'
-  5az:
-    !Equals
-    - !Ref NumberOfAvailabilityZones
-    - '5'
   Cross-AZ:
     !Equals
     - !Ref AZMode
     - cross-az
-  AutoCidrs:
-    !Equals
-    - !Select
-      - 0
-      - !Ref CidrBlocks
-    - Auto
-  AutoAzs:
-    !Equals
-    - !Select
-      - 0
-      - !Ref AvailabilityZones
-    - Auto
 Resources:
   ElastiCacheCluster:
     Type: AWS::ElastiCache::CacheCluster
@@ -324,11 +255,6 @@ Resources:
       EngineVersion: !Ref EngineVersion
       NumCacheNodes: !Ref NumCacheNodes
       Port: !Ref PortNumber
-      PreferredAvailabilityZones:
-        !If
-        - AutoAzs
-        - !GetAtt AWSSBInjectedGetAzs.AvailabilityZones
-        - !Ref AvailabilityZones
       PreferredMaintenanceWindow: !Sub ${PreferredMaintenanceWindowDay}:${PreferredMaintenanceWindowStartTime}-${PreferredMaintenanceWindowDay}:${PreferredMaintenanceWindowEndTime}
       VpcSecurityGroupIds:
       - !Ref ClusterSecurityGroup
@@ -342,124 +268,17 @@ Resources:
     Type: AWS::ElastiCache::SubnetGroup
     Properties:
       Description: AWS Service Broker Elasticache cluster
-      SubnetIds:
-      - !Ref ClusterSubnet1
-      - !Ref ClusterSubnet2
-      - !If
-        - 3az
-        - !Ref ClusterSubnet3
-        - !Ref AWS::NoValue
-      - !If
-        - 4az
-        - !Ref ClusterSubnet4
-        - !Ref AWS::NoValue
-      - !If
-        - 5az
-        - !Ref ClusterSubnet5
-        - !Ref AWS::NoValue
-  ClusterSubnet1:
-    Type: AWS::EC2::Subnet
-    Properties:
-      AvailabilityZone:
-        !Select
-        - 0
-        - !If
-          - AutoAzs
-          - !GetAtt AWSSBInjectedGetAzs.AvailabilityZones
-          - !Ref AvailabilityZones
-      VpcId: !Ref VpcId
-      CidrBlock:
-        !Select
-        - 0
-        - !If
-          - AutoCidrs
-          - !GetAtt AWSSBInjectedGetCidrs.CidrBlocks
-          - !Ref CidrBlocks
-  ClusterSubnet2:
-    Type: AWS::EC2::Subnet
-    Properties:
-      AvailabilityZone:
-        !Select
-        - 1
-        - !If
-          - AutoAzs
-          - !GetAtt AWSSBInjectedGetAzs.AvailabilityZones
-          - !Ref AvailabilityZones
-      VpcId: !Ref VpcId
-      CidrBlock:
-        !Select
-        - 1
-        - !If
-          - AutoCidrs
-          - !GetAtt AWSSBInjectedGetCidrs.CidrBlocks
-          - !Ref CidrBlocks
-  ClusterSubnet3:
-    Condition: 3az
-    Type: AWS::EC2::Subnet
-    Properties:
-      AvailabilityZone:
-        !Select
-        - 2
-        - !If
-          - AutoAzs
-          - !GetAtt AWSSBInjectedGetAzs.AvailabilityZones
-          - !Ref AvailabilityZones
-      VpcId: !Ref VpcId
-      CidrBlock:
-        !Select
-        - 2
-        - !If
-          - AutoCidrs
-          - !GetAtt AWSSBInjectedGetCidrs.CidrBlocks
-          - !Ref CidrBlocks
-  ClusterSubnet4:
-    Condition: 4az
-    Type: AWS::EC2::Subnet
-    Properties:
-      AvailabilityZone:
-        !Select
-        - 3
-        - !If
-          - AutoAzs
-          - !GetAtt AWSSBInjectedGetAzs.AvailabilityZones
-          - !Ref AvailabilityZones
-      VpcId: !Ref VpcId
-      CidrBlock:
-        !Select
-        - 3
-        - !If
-          - AutoCidrs
-          - !GetAtt AWSSBInjectedGetCidrs.CidrBlocks
-          - !Ref CidrBlocks
-  ClusterSubnet5:
-    Condition: 5az
-    Type: AWS::EC2::Subnet
-    Properties:
-      AvailabilityZone:
-        !Select
-        - 4
-        - !If
-          - AutoAzs
-          - !GetAtt AWSSBInjectedGetAzs.AvailabilityZones
-          - !Ref AvailabilityZones
-      VpcId: !Ref VpcId
-      CidrBlock:
-        !Select
-        - 4
-        - !If
-          - AutoCidrs
-          - !GetAtt AWSSBInjectedGetCidrs.CidrBlocks
-          - !Ref CidrBlocks
+      SubnetIds: !GetAtt AWSSBInjectedGetSubnetIds.SubnetIDs
   ClusterSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: !Sub Allow Client connections
-      VpcId: !Ref VpcId
+      VpcId: !GetAtt AWSSBInjectedGetSubnetIds.VpcId
       SecurityGroupIngress:
       - IpProtocol: tcp
         FromPort: !Ref PortNumber
         ToPort: !Ref PortNumber
-        CidrIp: !Ref AccessCidr
+        SourceSecurityGroupId: !GetAtt AWSSBInjectedGetSG.SecurityGroupId
       SecurityGroupEgress:
       - IpProtocol: '-1'
         FromPort: '-1'
@@ -474,11 +293,12 @@ Resources:
     Properties:
       ServiceToken: !GetAtt AWSSBInjectedCopyZipsLambda.Arn
       DestBucket: !Ref AWSSBInjectedLambdaZipsBucket
-      SourceBucket: awsservicebrokeralpha
-      Prefix: functions/
+      SourceBucket: micro-aws-servicebroker-templates
+      Prefix: ""
       Objects:
-      - get_cidrs/lambda_function.zip
-      - get_azs/lambda_function.zip
+      - functions/get_subnet_ids/lambda_function.zip
+      - functions/get_sg/lambda_function.zip
+      - layers/requests/lambda_layer.zip
   AWSSBInjectedCopyZipsRole:
     Type: AWS::IAM::Role
     Properties:
@@ -501,7 +321,7 @@ Resources:
             Action:
             - s3:GetObject
             Resource:
-            - arn:aws:s3:::awsservicebrokeralpha/*
+            - arn:aws:s3:::micro-aws-servicebroker-templates/*
           - Effect: Allow
             Action:
             - s3:PutObject
@@ -513,7 +333,7 @@ Resources:
     Properties:
       Description: Copies objects from a source S3 bucket to a destination
       Handler: index.handler
-      Runtime: python2.7
+      Runtime: python3.7
       Role: !GetAtt AWSSBInjectedCopyZipsRole.Arn
       Timeout: 240
       Code:
@@ -570,8 +390,7 @@ Resources:
               finally:
                   timer.cancel()
                   cfnresponse.send(event, context, status, {}, None)
-  AWSSBInjectedGetCidrsRole:
-    Condition: AutoCidrs
+  AWSSBInjectedGetSubnetIdsRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -585,7 +404,7 @@ Resources:
           - sts:AssumeRole
       Path: /
       Policies:
-      - PolicyName: cfn_utility_get_cidrs
+      - PolicyName: cfn_utility_get_subnet_ids
         PolicyDocument:
           Version: '2012-10-17'
           Statement:
@@ -593,36 +412,33 @@ Resources:
             Action:
             - ec2:DescribeVpcs
             - ec2:DescribeSubnets
-            - ec2:DescribeAvailabilityZones
             - logs:CreateLogGroup
             - logs:CreateLogStream
             - logs:PutLogEvents
             Resource: '*'
-  AWSSBInjectedGetCidrsLambda:
+  AWSSBInjectedGetSubnetIdsLambda:
     DependsOn: AWSSBInjectedCopyZips
-    Condition: AutoCidrs
     Type: AWS::Lambda::Function
     Properties:
       Handler: lambda_function.handler
       Role:
         Fn::GetAtt:
-        - AWSSBInjectedGetCidrsRole
+        - AWSSBInjectedGetSubnetIdsRole
         - Arn
       Code:
         S3Bucket: !Ref AWSSBInjectedLambdaZipsBucket
-        S3Key: functions/get_cidrs/lambda_function.zip
-      Runtime: python2.7
+        S3Key: functions/get_subnet_ids/lambda_function.zip
+      Runtime: python3.7
       Timeout: '60'
-  AWSSBInjectedGetCidrs:
-    Condition: AutoCidrs
+      Layers:
+        - !Ref AWSSBRequestsLambdaLayer
+  AWSSBInjectedGetSubnetIds:
     Type: AWS::CloudFormation::CustomResource
     Properties:
-      ServiceToken: !GetAtt AWSSBInjectedGetCidrsLambda.Arn
-      Qty: !Ref NumberOfAvailabilityZones
-      VpcId: !Ref VpcId
-      CidrSize: !Ref CidrSize
-  AWSSBInjectedGetAzsRole:
-    Condition: AutoAzs
+      ServiceToken: !GetAtt AWSSBInjectedGetSubnetIdsLambda.Arn
+      VpcName: !Ref VpcName
+      SubnetName: !Ref SubnetName
+  AWSSBInjectedGetSGRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -636,38 +452,50 @@ Resources:
           - sts:AssumeRole
       Path: /
       Policies:
-      - PolicyName: cfn_utility_get_cidrs
+      - PolicyName: cfn_utility_get_sg
         PolicyDocument:
           Version: '2012-10-17'
           Statement:
           - Effect: Allow
             Action:
-            - ec2:DescribeAvailabilityZones
+            - ec2:DescribeSecurityGroups
             - logs:CreateLogGroup
             - logs:CreateLogStream
             - logs:PutLogEvents
             Resource: '*'
-  AWSSBInjectedGetAzsLambda:
+  AWSSBInjectedGetSGLambda:
     DependsOn: AWSSBInjectedCopyZips
-    Condition: AutoAzs
     Type: AWS::Lambda::Function
     Properties:
       Handler: lambda_function.handler
       Role:
         Fn::GetAtt:
-        - AWSSBInjectedGetAzsRole
+        - AWSSBInjectedGetSGRole
         - Arn
       Code:
         S3Bucket: !Ref AWSSBInjectedLambdaZipsBucket
-        S3Key: functions/get_azs/lambda_function.zip
-      Runtime: python2.7
+        S3Key: functions/get_sg/lambda_function.zip
+      Runtime: python3.7
       Timeout: '60'
-  AWSSBInjectedGetAzs:
-    Condition: AutoAzs
+      Layers:
+        - !Ref AWSSBRequestsLambdaLayer
+  AWSSBInjectedGetSG:
     Type: AWS::CloudFormation::CustomResource
     Properties:
-      ServiceToken: !GetAtt AWSSBInjectedGetAzsLambda.Arn
-      Qty: !Ref NumberOfAvailabilityZones
+      ServiceToken: !GetAtt AWSSBInjectedGetSGLambda.Arn
+      SGName: !Ref InboundSGName
+  AWSSBRequestsLambdaLayer:
+    DependsOn: AWSSBInjectedCopyZips
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      CompatibleRuntimes:
+        - python3.7
+      Content:
+        S3Bucket: !Ref AWSSBInjectedLambdaZipsBucket
+        S3Key: layers/requests/lambda_layer.zip
+      Description: Contains requests and cfnresponse.send()
+      LayerName: requests
+      LicenseInfo: Apache License v2.0, AWS Customer Agreement
 Outputs:
   EndpointAddress:
     Value:

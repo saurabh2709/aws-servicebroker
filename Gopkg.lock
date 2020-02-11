@@ -60,6 +60,18 @@
   version = "v1.13.59"
 
 [[projects]]
+  digest = "1:db5088797429ad1bf11fc8ecff920572cede0bf06198fda393c13651ac173402"
+  name = "github.com/awslabs/aws-servicebroker"
+  packages = [
+    "pkg/broker",
+    "pkg/dynamodbadapter",
+    "pkg/serviceinstance",
+  ]
+  pruneopts = "NUT"
+  revision = "c23edac8358e1c8aa9f6c9f7fce933f28a658fff"
+  version = "v1.0.1"
+
+[[projects]]
   branch = "master"
   digest = "1:707ebe952a8b3d00b343c01536c79c73771d100f63ec6babeaed5c79e2b8a8dd"
   name = "github.com/beorn7/perks"
@@ -309,6 +321,9 @@
     "github.com/aws/aws-sdk-go/service/ssm/ssmiface",
     "github.com/aws/aws-sdk-go/service/sts",
     "github.com/aws/aws-sdk-go/service/sts/stsiface",
+    "github.com/awslabs/aws-servicebroker/pkg/broker",
+    "github.com/awslabs/aws-servicebroker/pkg/dynamodbadapter",
+    "github.com/awslabs/aws-servicebroker/pkg/serviceinstance",
     "github.com/go-errors/errors",
     "github.com/golang/glog",
     "github.com/jaymccon/osb-broker-lib/pkg/server",

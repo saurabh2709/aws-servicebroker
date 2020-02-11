@@ -77,6 +77,7 @@ spec:
           name: awssb-ssl
           readOnly: true
         env:
+        {{- if not .Values.aws.iamproxy}}
         - name: AWS_ACCESS_KEY_ID
           valueFrom:
             secretKeyRef:
@@ -97,6 +98,7 @@ spec:
               name: {{ template "fullname" . }}-credentials
               key: secretkey
               {{- end }}
+        {{- end }}
         - name: PARAM_OVERRIDE_{{ .Values.brokerconfig.brokerid }}_all_all_all_region
           value: {{ .Values.aws.region }}
         - name: PARAM_OVERRIDE_{{ .Values.brokerconfig.brokerid }}_all_all_all_VpcId

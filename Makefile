@@ -3,6 +3,8 @@ TAG  ?= latest
 BUCKET_NAME ?= my-helm-repo-bucket
 BUCKET_PREFIX ?= /charts
 TEMPLATE_PREFIX ?= /templates/latest
+FUNCTION_PREFIX ?= /functions
+LAYER_PREFIX ?= /layers
 HELM_URL ?= https://$(BUCKET_NAME).s3.amazonaws.com$(BUCKET_PREFIX)
 S3URI ?= $(shell echo $(HELM_URL)/ | sed 's/https:/s3:/' | sed 's/.s3.amazonaws.com//')
 ACL ?= private
@@ -10,6 +12,8 @@ PROFILE_NAME ?= ""
 PROFILE ?= $(shell if [ "${PROFILE_NAME}" != "" ] ; then echo "--profile ${PROFILE_NAME}" ; fi)
 VERSION ?= $(shell cat ./version)
 TEMPLATES ?= $(shell cd templates ; ls -1 ; cd ..)
+FUNCTIONS ?= $(shell cd functions ; ls -1 ; cd ..)
+LAYERS ?= $(shell cd layers ; ls -1 ; cd ..)
 
 build: ## Builds the starter pack
 	go build -i github.com/awslabs/aws-servicebroker/cmd/servicebroker
@@ -88,6 +92,21 @@ templates: ## Package and upload templates
 	cd .. && \
 	aws s3 cp --recursive release/$(VERSION)$(TEMPLATE_PREFIX)/ s3://$(BUCKET_NAME)$(TEMPLATE_PREFIX)/ --acl $(ACL) $(PROFILE)
 
+functions: ## Package and upload functions
+	mkdir -p release/$(VERSION)$(FUNCTION_PREFIX)/ && \
+	cp -a functions functions-staging && \
+	cd functions-staging && \
+	for i in $(FUNCTIONS) ; do mkdir -p ../release/$(VERSION)$(FUNCTION_PREFIX)/$$i ; cd $$i ; pip install -r requirements.txt --target . ; zip -r lambda_function * -x .* -x '*bin/*' ; cp lambda_function.zip ../../release/$(VERSION)$(FUNCTION_PREFIX)/$$i ; cd .. ; done && \
+	cd .. && \
+	aws s3 cp --recursive release/$(VERSION)$(FUNCTION_PREFIX)/ s3://$(BUCKET_NAME)$(FUNCTION_PREFIX)/ --acl $(ACL) $(PROFILE) && \
+	rm -rf functions-staging && \
+	cp -a layers layers-staging && \
+	cd layers-staging && \
+	for i in $(LAYERS) ; do mkdir -p ../release/$(VERSION)$(LAYER_PREFIX)/$$i ; cd $$i/python ; pip install -r requirements.txt --target . ; cd .. ; zip -r lambda_layer * -x .* -x 'python/bin/*' -x python/botocore* ; cp lambda_layer.zip ../../release/$(VERSION)$(LAYER_PREFIX)/$$i ; cd .. ; done && \
+	cd .. && \
+	aws s3 cp --recursive release/$(VERSION)$(LAYER_PREFIX)/ s3://$(BUCKET_NAME)$(LAYER_PREFIX)/ --acl $(ACL) $(PROFILE) && \
+	rm -rf layers-staging
+
 help: ## Shows the help
 	@echo 'Usage: make <OPTIONS> ... <TARGETS>'
 	@echo ''
@@ -97,4 +116,4 @@ help: ## Shows the help
         awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 	@echo ''
 
-.PHONY: build test functional-test linux cf image helm deploy-chart release templates clean help
+.PHONY: build test functional-test linux cf image helm deploy-chart release templates clean help functions
