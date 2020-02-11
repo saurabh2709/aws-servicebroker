@@ -19,7 +19,7 @@ Metadata:
     DocumentationUrl: https://aws.amazon.com/documentation/elasticache/
     ProviderDisplayName: Amazon Web Services
     ServicePlans:
-      production:
+      sign-production:
         DisplayName: Production
         Description: Configuration designed for production deployments
         LongDescription: Creates an Amazon ElastiCache for memcached, optimised for

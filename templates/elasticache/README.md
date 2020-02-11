@@ -7,11 +7,11 @@ Table of contents
 =================
 
 * [Parameters](#parameters)
-  * [production](#param-production)
+  * [sign-production](#param-production)
   * [custom](#param-custom)
 * [Bind Credentials](#bind-credentials)
 * [Examples](#kubernetes-openshift-examples)
-  * [production](#example-production)
+  * [sign-production](#example-production)
   * [custom](#example-custom)
 
 <a id="parameters" />
@@ -20,7 +20,7 @@ Table of contents
 
 <a id="param-production" />
 
-## production
+## sign-production
 
 Creates an Amazon ElastiCache for memcached, optimised for production use
 
@@ -139,7 +139,7 @@ them as additional parameters
 
 <a id="example-production" />
 
-## production
+## sign-production
 
 ### Minimal
 ```yaml
@@ -149,7 +149,7 @@ metadata:
   name: elasticache-production-minimal-example
 spec:
   clusterServiceClassExternalName: elasticache
-  clusterServicePlanExternalName: production
+  clusterServicePlanExternalName: sign-production
   parameters:
     AccessCidr: [VALUE] # REQUIRED
 ```
@@ -162,7 +162,7 @@ metadata:
   name: elasticache-production-complete-example
 spec:
   clusterServiceClassExternalName: elasticache
-  clusterServicePlanExternalName: production
+  clusterServicePlanExternalName: sign-production
   parameters:
     AccessCidr: [VALUE] # REQUIRED
     PreferredMaintenanceWindowDay: Mon # OPTIONAL
