@@ -9,13 +9,17 @@ alnum = string.ascii_uppercase + string.ascii_lowercase + string.digits
 ec2 = boto3.resource('ec2')
 client = boto3.client('ec2')
 
+
 def get_subnet_ids(vpc_id, name):
     vpc = ec2.Vpc(vpc_id)
-    return [s.subnet_id for s in vpc.subnets.filter(Filters=[{'Name':'tag:Name', 'Values': [name]}])]
+    return {s.subnet_id: s.availability_zone
+            for s in vpc.subnets.filter(Filters=[{'Name': 'tag:Name', 'Values': [name]}])}
+
 
 def get_vpc_id(vpc_name):
-    vpcs = client.describe_vpcs(Filters=[{'Name':'tag:Name', 'Values': [vpc_name]}])
+    vpcs = client.describe_vpcs(Filters=[{'Name': 'tag:Name', 'Values': [vpc_name]}])
     return [vpc['VpcId'] for vpc in vpcs['Vpcs']][0]
+
 
 def handler(event, context):
     response_code = cfnresponse.SUCCESS
@@ -29,10 +33,16 @@ def handler(event, context):
             response_data['VpcId'] = get_vpc_id(
                 event['ResourceProperties']['VpcName']
             )
-            response_data['SubnetIDs'] = get_subnet_ids(
+            subnets = get_subnet_ids(
                 response_data['VpcId'],
                 event['ResourceProperties']['SubnetName']
-            )
+                )
+            subnet_ids = list(subnets.keys())
+            random.shuffle(subnet_ids)
+            response_data['SubnetIDs'] = subnet_ids
+            azs = list(subnets.values())
+            random.shuffle(azs)
+            response_data['AvailabilityZones'] = azs
         cfnresponse.send(event, context, response_code, response_data, phys_id)
     except Exception as e:
         print(str(e))

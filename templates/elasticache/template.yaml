@@ -20,7 +20,7 @@ Metadata:
     ProviderDisplayName: Amazon Web Services
     ServicePlans:
       sign-production:
-        DisplayName: Production
+        DisplayName: Sign Production
         Description: Configuration designed for production deployments
         LongDescription: Creates an Amazon ElastiCache for memcached, optimized for
           production use
@@ -81,6 +81,8 @@ Metadata:
         default: AZ Mode
       InboundSGName:
         default: Accessing Security Group
+      SubnetName:
+        default: Subnet Name
       PreferredMaintenanceWindowStartTime:
         default: Preferred MaintenanceWindow Start Time
       PreferredMaintenanceWindowEndTime:

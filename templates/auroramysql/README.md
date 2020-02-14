@@ -6,8 +6,8 @@ Table of contents
 =================
 
 * [Parameters](#parameters)
-  * [production](#param-production)
-  * [dev](#param-dev)
+  * [sign-production](#param-production)
+  * [sign-dev](#param-dev)
   * [custom](#param-custom)
 * [Bind Credentials](#bind-credentials)
 * [Examples](#kubernetes-openshift-examples)
@@ -21,7 +21,7 @@ Table of contents
 
 <a id="param-production" />
 
-## production
+## sign-production
 
 Creates an Amazon Aurora for MySQL database optimised for production use
 
@@ -29,11 +29,7 @@ Pricing: https://aws.amazon.com/rds/aurora/pricing/
 
 ### Required
 
-At a minimum these parameters must be declared when provisioning an instance of this service
-
-Name           | Description     | Accepted Values
--------------- | --------------- | ---------------
-AccessCidr|CIDR block to allow to connect to database|string
+No parameters must be declared when provisioning an instance of this service
 
 ### Optional
 
@@ -42,7 +38,7 @@ These parameters can optionally be declared when provisioning
 Name            | Description     | Default         | Accepted Values
 --------------- | --------------- | --------------- | ---------------
 DBInstanceClass| Database Instance Class (Aurora MySQL supports the db.t3 instance classes for Aurora MySQL 1.15 and higher, and all Aurora MySQL 2.* versions). Not applicable if Engine Mode is Serverless.|db.r5.12xlarge, db.r5.4xlarge, db.r5.2xlarge, db.r5.xlarge, db.r5.large, db.r4.16xlarge, db.r4.8xlarge, db.r4.4xlarge, db.r4.2xlarge, db.r4.xlarge, db.r4.large, db.r3.8xlarge, db.r3.4xlarge, db.r3.2xlarge, db.r3.xlarge, db.r3.large, db.t3.2xlarge, db.t3.xlarge, db.t3.large, db.t3.medium, db.t3.small, db.t3.micro, db.t2.medium, db.t2.small
-DBEngineVersion|Select Aurora Database Engine Version|Aurora-MySQL5.6.10a|Aurora-MySQL5.6.10a, Aurora-MySQL5.6-1.19.0, Aurora-MySQL5.7.12, Aurora-MySQL5.7-2.03.2, Aurora-MySQL5.7-2.03.3, Aurora-MySQL5.7-2.03.4, Aurora-MySQL5.7-2.03.4.2, Aurora-MySQL5.7-2.04.0, Aurora-MySQL5.7-2.04.1, Aurora-MySQL5.7-2.04.1.2  
+DBEngineVersion|Select Aurora Database Engine Version|Aurora-MySQL5.6.10a|Aurora-MySQL5.6.10a, Aurora-MySQL5.6-1.19.0, Aurora-MySQL5.7.12, Aurora-MySQL5.7-2.03.2, Aurora-MySQL5.7-2.03.3, Aurora-MySQL5.7-2.03.4, Aurora-MySQL5.7-2.03.4.2, Aurora-MySQL5.7-2.04.0, Aurora-MySQL5.7-2.04.1, Aurora-MySQL5.7-2.04.1.2
 RDSTimeZone|The default timezone for the database engine to use.|UTC|Africa/Cairo, Africa/Casablanca, Africa/Harare, Africa/Monrovia, Africa/Nairobi, Africa/Tripoli, Africa/Windhoek, America/Araguaina, America/Asuncion, America/Bogota, America/Caracas, America/Chihuahua, America/Cuiaba, America/Denver, America/Fortaleza, America/Guatemala, America/Halifax, America/Manaus, America/Matamoros, America/Monterrey, America/Montevideo, America/Phoenix, America/Santiago, America/Tijuana, Asia/Amman, Asia/Ashgabat, Asia/Baghdad, Asia/Baku, Asia/Bangkok, Asia/Beirut, Asia/Calcutta, Asia/Damascus, Asia/Dhaka, Asia/Irkutsk, Asia/Jerusalem, Asia/Kabul, Asia/Karachi, Asia/Kathmandu, Asia/Krasnoyarsk, Asia/Magadan, Asia/Muscat, Asia/Novosibirsk, Asia/Riyadh, Asia/Seoul, Asia/Shanghai, Asia/Singapore, Asia/Taipei, Asia/Tehran, Asia/Tokyo, Asia/Ulaanbaatar, Asia/Vladivostok, Asia/Yakutsk, Asia/Yerevan, Atlantic/Azores, Australia/Adelaide, Australia/Brisbane, Australia/Darwin, Australia/Hobart, Australia/Perth, Australia/Sydney, Canada/Newfoundland, Canada/Saskatchewan, Brazil/East, Europe/Amsterdam, Europe/Athens, Europe/Dublin, Europe/Helsinki, Europe/Istanbul, Europe/Kaliningrad, Europe/Moscow, Europe/Paris, Europe/Prague, Europe/Sarajevo, Pacific/Auckland, Pacific/Fiji, Pacific/Guam, Pacific/Honolulu, Pacific/Samoa, US/Alaska, US/Central, US/Eastern, US/East-Indiana, US/Pacific, UTC
 PreferredMaintenanceWindowDay|The day of the week which RDS maintenance will be performed|Sun|Mon, Tue, Wed, Thu, Fri, Sat, Sun
 PreferredMaintenanceWindowEndTime|The weekly end time in UTC for the RDS maintenance window, must be more than PreferredMaintenanceWindowEndTime.|06:00|00:00, 01:00, 02:00, 03:00, 04:00, 05:00, 06:00, 07:00, 08:00, 09:00, 10:00, 11:00, 12:00, 13:00, 14:00, 15:00, 16:00, 17:00, 18:00, 19:00, 20:00, 21:00, 22:00
@@ -67,23 +63,22 @@ These are parameters that are prescribed by the plan and are not configurable, s
 
 Name           | Description     | Value
 -------------- | --------------- | ---------------
-NumberOfAvailabilityZones|Quantity of subnets to use, if selecting more than 2 the region this stack is in must have at least that many Availability Zones|3
 NumberofAuroraReplicas|Number of Aurora Replicas to deploy in addition to the Primary. If selecting 2 replicas, 3 are required in Number Of Availability Zones.|2
-AvailabilityZones|list of availability zones to use, must be the same quantity as specified. Leave as Auto for stack to determine AZ names available. |Auto
-CidrSize|Size of Cidr block to allocate if CidrBlocks is set to Auto.|27
-CidrBlocks|comma seperated list of CIDR blocks to place RDS into, must be the same quantity as specified in NumberOfAvailabilityZones|Auto
 DBName|The name of the database to create when the DB instance is created, will be autogenerated if set to "Auto".|Auto
 DBPort|TCP/IP Port for the Database Instance|3306
-StorageEncrypted|Indicates whether the DB instance is encrypted.|true 
+StorageEncrypted|Indicates whether the DB instance is encrypted.|true
 BackupRetentionPeriod|The number of days during which automatic DB snapshots are retained. Min is 1 and Max value is 35.|35
 MonitoringInterval|The interval, in seconds, between points when Enhanced Monitoring metrics are collected for the DB instance.|1
 AutoMinorVersionUpgrade|Indicates that minor engine upgrades are applied automatically to the DB instance during the maintenance window.|true
 DBUsername|Database master username|master
 DBPassword|Master user database Password, if left at default a 32 character password will be generated|Auto
+SubnetName|String to match against existing subnets to place the cache cluster in (glob wildcards allowed).|\*-support-\*
+InboundSGName|Existing Security Group name to allow access to database (glob wildcards allowed).|\*-sgs-eks-workers-\*
+VpcName|The name of the VPC to launch the Memcache cluster into.|\*micro\*
 
 <a id="param-dev" />
 
-## dev
+## sign-dev
 
 Creates an Amazon Aurora for MySQL database optimised for dev/test use
 
@@ -91,11 +86,7 @@ Pricing: https://aws.amazon.com/rds/aurora/pricing/
 
 ### Required
 
-At a minimum these parameters must be declared when provisioning an instance of this service
-
-Name           | Description     | Accepted Values
--------------- | --------------- | ---------------
-AccessCidr|CIDR block to allow to connect to database|string
+No parameters must be declared when provisioning an instance of this service
 
 ### Optional
 
@@ -104,7 +95,7 @@ These parameters can optionally be declared when provisioning
 Name           | Description     | Default         | Accepted Values
 -------------- | --------------- | --------------- | ---------------
 DBInstanceClass| Database Instance Class (Aurora MySQL supports the db.t3 instance classes for Aurora MySQL 1.15 and higher, and all Aurora MySQL 2.* versions). Not applicable if Engine Mode is Serverless.|db.r5.12xlarge, db.r5.4xlarge, db.r5.2xlarge, db.r5.xlarge, db.r5.large, db.r4.16xlarge, db.r4.8xlarge, db.r4.4xlarge, db.r4.2xlarge, db.r4.xlarge, db.r4.large, db.r3.8xlarge, db.r3.4xlarge, db.r3.2xlarge, db.r3.xlarge, db.r3.large, db.t3.2xlarge, db.t3.xlarge, db.t3.large, db.t3.medium, db.t3.small, db.t3.micro, db.t2.medium, db.t2.small
-DBEngineVersion|Select Aurora Database Engine Version|Aurora-MySQL5.6.10a|Aurora-MySQL5.6.10a, Aurora-MySQL5.6-1.19.0, Aurora-MySQL5.7.12, Aurora-MySQL5.7-2.03.2, Aurora-MySQL5.7-2.03.3, Aurora-MySQL5.7-2.03.4, Aurora-MySQL5.7-2.03.4.2, Aurora-MySQL5.7-2.04.0, Aurora-MySQL5.7-2.04.1, Aurora-MySQL5.7-2.04.1.2  
+DBEngineVersion|Select Aurora Database Engine Version|Aurora-MySQL5.6.10a|Aurora-MySQL5.6.10a, Aurora-MySQL5.6-1.19.0, Aurora-MySQL5.7.12, Aurora-MySQL5.7-2.03.2, Aurora-MySQL5.7-2.03.3, Aurora-MySQL5.7-2.03.4, Aurora-MySQL5.7-2.03.4.2, Aurora-MySQL5.7-2.04.0, Aurora-MySQL5.7-2.04.1, Aurora-MySQL5.7-2.04.1.2
 RDSTimeZone|The default timezone for the database engine to use.|UTC|Africa/Cairo, Africa/Casablanca, Africa/Harare, Africa/Monrovia, Africa/Nairobi, Africa/Tripoli, Africa/Windhoek, America/Araguaina, America/Asuncion, America/Bogota, America/Caracas, America/Chihuahua, America/Cuiaba, America/Denver, America/Fortaleza, America/Guatemala, America/Halifax, America/Manaus, America/Matamoros, America/Monterrey, America/Montevideo, America/Phoenix, America/Santiago, America/Tijuana, Asia/Amman, Asia/Ashgabat, Asia/Baghdad, Asia/Baku, Asia/Bangkok, Asia/Beirut, Asia/Calcutta, Asia/Damascus, Asia/Dhaka, Asia/Irkutsk, Asia/Jerusalem, Asia/Kabul, Asia/Karachi, Asia/Kathmandu, Asia/Krasnoyarsk, Asia/Magadan, Asia/Muscat, Asia/Novosibirsk, Asia/Riyadh, Asia/Seoul, Asia/Shanghai, Asia/Singapore, Asia/Taipei, Asia/Tehran, Asia/Tokyo, Asia/Ulaanbaatar, Asia/Vladivostok, Asia/Yakutsk, Asia/Yerevan, Atlantic/Azores, Australia/Adelaide, Australia/Brisbane, Australia/Darwin, Australia/Hobart, Australia/Perth, Australia/Sydney, Canada/Newfoundland, Canada/Saskatchewan, Brazil/East, Europe/Amsterdam, Europe/Athens, Europe/Dublin, Europe/Helsinki, Europe/Istanbul, Europe/Kaliningrad, Europe/Moscow, Europe/Paris, Europe/Prague, Europe/Sarajevo, Pacific/Auckland, Pacific/Fiji, Pacific/Guam, Pacific/Honolulu, Pacific/Samoa, US/Alaska, US/Central, US/Eastern, US/East-Indiana, US/Pacific, UTC
 PreferredMaintenanceWindowDay|The day of the week which RDS maintenance will be performed|Sun|Mon, Tue, Wed, Thu, Fri, Sat, Sun
 PreferredMaintenanceWindowEndTime|The weekly end time in UTC for the RDS maintenance window, must be more than PreferredMaintenanceWindowStartTime.|06:00|00:00, 01:00, 02:00, 03:00, 04:00, 05:00, 06:00, 07:00, 08:00, 09:00, 10:00, 11:00, 12:00, 13:00, 14:00, 15:00, 16:00, 17:00, 18:00, 19:00, 20:00, 21:00, 22:00
@@ -130,20 +121,23 @@ Name           | Description     | Value
 -------------- | --------------- | ---------------
 NumberOfAvailabilityZones|Quantity of subnets to use, if selecting more than 2 the region this stack is in must have at least that many Availability Zones|2
 NumberofAuroraReplicas|Number of Aurora Replicas to deploy in addition to the Primary. If selecting 2 replicas, 3 are required in Number Of Availability Zones.|1
-AvailabilityZones|list of availability zones to use, must be the same quantity as specified. Leave as Auto for stack to determine AZ names available. |Auto 
+AvailabilityZones|list of availability zones to use, must be the same quantity as specified. Leave as Auto for stack to determine AZ names available. |Auto
 CidrSize|Size of Cidr block to allocate if CidrBlocks is set to Auto.|28
-CidrBlocks|comma seperated list of CIDR blocks to place RDS into, must be the same quantity as specified in NumberOfAvailabilityZones|Auto 
-DBName|The name of the database to create when the DB instance is created, will be autogenerated if set to "Auto".|Auto 
+CidrBlocks|comma seperated list of CIDR blocks to place RDS into, must be the same quantity as specified in NumberOfAvailabilityZones|Auto
+DBName|The name of the database to create when the DB instance is created, will be autogenerated if set to "Auto".|Auto
 DBPort|TCP/IP Port for the Database Instance|3306
-StorageEncrypted|Indicates whether the DB instance is encrypted.|true 
+StorageEncrypted|Indicates whether the DB instance is encrypted.|true
 BackupRetentionPeriod|The number of days during which automatic DB snapshots are retained. Min is 1 and Max value is 35.|0
 MonitoringInterval|The interval, in seconds, between points when Enhanced Monitoring metrics are collected for the DB instance.|60
-AutoMinorVersionUpgrade|Indicates that minor engine upgrades are applied automatically to the DB instance during the maintenance window.|true 
+AutoMinorVersionUpgrade|Indicates that minor engine upgrades are applied automatically to the DB instance during the maintenance window.|true
 DBUsername|Database master username|master
-DBPassword|Master user database Password, if left at default a 32 character password will be generated|Auto 
+DBPassword|Master user database Password, if left at default a 32 character password will be generated|Auto
 PreferredMaintenanceWindowDay|The day of the week which RDS maintenance will be performed|Sun
 PreferredMaintenanceWindowStartTime|The weekly end time in UTC for the RDS maintenance window, must be more than PreferredMaintenanceWindowStartTime.|06:00
 PreferredMaintenanceWindowEndTime|The weekly start time in UTC for the RDS maintenance window, must be less than PreferredMaintenanceWindowEndTime.|04:00
+SubnetName|String to match against existing subnets to place the cache cluster in (glob wildcards allowed).|\*-support-\*
+InboundSGName|Existing Security Group name to allow access to database (glob wildcards allowed).|\*-sgs-eks-workers-\*
+VpcName|The name of the VPC to launch the Memcache cluster into.|\*micro\*
 
 <a id="param-custom" />
 
@@ -159,8 +153,10 @@ At a minimum these parameters must be declared when provisioning an instance of 
 
 Name           | Description     | Accepted Values
 -------------- | --------------- | ---------------
-AccessCidr|CIDR block to allow to connect to database|string
 DBUsername|Master database Username|string
+SubnetName|String to match against existing subnets to place the cache cluster in (glob wildcards allowed).|string
+InboundSGName|Existing Security Group name to allow access to database (glob wildcards allowed).|string
+VpcName|The name of the VPC to launch the Memcache cluster into.|string
 
 ### Optional
 
@@ -176,7 +172,7 @@ DBName|The name of the database to create when the DB instance is created, will 
 DBPort|TCP/IP Port for the Database Instance|3306|3306
 DBUsername|Database master username|master|master
 DBPassword|Master user database Password, if left at default a 32 character password will be generated|Auto|Auto
-DBEngineVersion|Select Aurora Database Engine Version|Aurora-MySQL5.6.10a|Aurora-MySQL5.6.10a, Aurora-MySQL5.6-1.19.0, Aurora-MySQL5.7.12, Aurora-MySQL5.7-2.03.2, Aurora-MySQL5.7-2.03.3, Aurora-MySQL5.7-2.03.4, Aurora-MySQL5.7-2.03.4.2, Aurora-MySQL5.7-2.04.0, Aurora-MySQL5.7-2.04.1, Aurora-MySQL5.7-2.04.1.2  
+DBEngineVersion|Select Aurora Database Engine Version|Aurora-MySQL5.6.10a|Aurora-MySQL5.6.10a, Aurora-MySQL5.6-1.19.0, Aurora-MySQL5.7.12, Aurora-MySQL5.7-2.03.2, Aurora-MySQL5.7-2.03.3, Aurora-MySQL5.7-2.03.4, Aurora-MySQL5.7-2.03.4.2, Aurora-MySQL5.7-2.04.0, Aurora-MySQL5.7-2.04.1, Aurora-MySQL5.7-2.04.1.2
 DBInstanceClass| Database Instance Class (Aurora MySQL supports the db.t3 instance classes for Aurora MySQL 1.15 and higher, and all Aurora MySQL 2.* versions). Not applicable if Engine Mode is Serverless.|db.r5.12xlarge, db.r5.4xlarge, db.r5.2xlarge, db.r5.xlarge, db.r5.large, db.r4.16xlarge, db.r4.8xlarge, db.r4.4xlarge, db.r4.2xlarge, db.r4.xlarge, db.r4.large, db.r3.8xlarge, db.r3.4xlarge, db.r3.2xlarge, db.r3.xlarge, db.r3.large, db.t3.2xlarge, db.t3.xlarge, db.t3.large, db.t3.medium, db.t3.small, db.t3.micro, db.t2.medium, db.t2.small
 DeletionProtection|Indicates if the DB cluster should have deletion protection enabled. |false|true, false
 NumberOfAvailabilityZones|Quantity of subnets to use, if selecting more than 2 the region this stack is in must have at least that many Availability Zones|2|2, 3, 4, 5
@@ -231,7 +227,7 @@ them as additional parameters
 
 <a id="example-production" />
 
-## production
+## sign-production
 
 ### Minimal
 ```yaml
@@ -242,8 +238,6 @@ metadata:
 spec:
   clusterServiceClassExternalName: auroramysql
   clusterServicePlanExternalName: production
-  parameters:
-    AccessCidr: [VALUE] # REQUIRED
 ```
 
 ### Complete
@@ -256,9 +250,8 @@ spec:
   clusterServiceClassExternalName: auroramysql
   clusterServicePlanExternalName: production
   parameters:
-    AccessCidr: [VALUE] # REQUIRED    
     DBInstanceClass: db.r4.large # OPTIONAL
-    DBEngineVersion: Aurora-MySQL5.6.10a # OPTIONAL
+    DBEngineVersion: Aurora-MySQL5.7-2.07.1 # OPTIONAL
     RDSTimeZone: UTC # OPTIONAL
     PreferredMaintenanceWindowDay: Sun # OPTIONAL
     PreferredMaintenanceWindowEndTime: 06:00 # OPTIONAL
@@ -278,8 +271,6 @@ metadata:
 spec:
   clusterServiceClassExternalName: auroramysql
   clusterServicePlanExternalName: dev
-  parameters:
-    AccessCidr: [VALUE] # REQUIRED
 ```
 
 ### Complete
@@ -292,10 +283,9 @@ spec:
   clusterServiceClassExternalName: auroramysql
   clusterServicePlanExternalName: dev
   parameters:
-    AccessCidr: [VALUE] # REQUIRED    
     DBInstanceClass: db.m4.xlarge # OPTIONAL
-    EngineVersion: Aurora-MySQL5.6.10a # OPTIONAL
-    PostgresServerTimezone: UTC # OPTIONAL
+    DBEngineVersion: Aurora-MySQL5.7-2.07.1 # OPTIONAL
+    RDSTimeZone: UTC # OPTIONAL
     PubliclyAccessible: false # OPTIONAL
 ```
 <a id="example-custom" />
@@ -312,7 +302,9 @@ spec:
   clusterServiceClassExternalName: auroramysql
   clusterServicePlanExternalName: custom
   parameters:
-    AccessCidr: [VALUE] # REQUIRED
+    VpcName: *custom*
+    SubnetName: *support*
+    InboundSGName: *kubernete*
     DBUsername: [VALUE] # REQUIRED
 ```
 
@@ -326,13 +318,15 @@ spec:
   clusterServiceClassExternalName: auroramysql
   clusterServicePlanExternalName: custom
   parameters:
-    AccessCidr: [VALUE] # REQUIRED
-    DBUsername: [VALUE] # REQUIRED        
+    VpcName: *custom*
+    SubnetName: *support*
+    InboundSGName: *kubernete*
+    DBUsername: [VALUE] # REQUIRED
     AutoMinorVersionUpgrade: true # OPTIONAL
     AvailabilityZones: Auto # OPTIONAL
     BackupRetentionPeriod: 35 # OPTIONAL
     CidrBlocks: Auto # OPTIONAL
-    CidrSize: 27 # OPTIONAL    
+    CidrSize: 27 # OPTIONAL
     DBInstanceClass: db.r4.large # OPTIONAL
     DeletionProtection: false #OPTIONAL
     DBName: Auto # OPTIONAL
@@ -342,12 +336,12 @@ spec:
     NumberofAuroraReplicas: 0 # OPTIONAL
     NumberOfAvailabilityZones: 2 # OPTIONAL
     DBPort: 3302 # OPTIONAL
-    RDSTimeZone: UTC # OPTIONAL    
+    RDSTimeZone: UTC # OPTIONAL
     PreferredMaintenanceWindowDay: Sun # OPTIONAL
     PreferredMaintenanceWindowEndTime: 06:00 # OPTIONAL
     PreferredMaintenanceWindowStartTime: 04:00 # OPTIONAL
     PubliclyAccessible: false # OPTIONAL
-    StorageEncrypted: true # OPTIONAL    
+    StorageEncrypted: true # OPTIONAL
     DBEngineMode: provisioned # OPTIONAL
     ServerlessMinCapacityUnit: 2 # OPTIONAL
     ServerlessMaxCapacityUnit: 64 # OPTIONAL

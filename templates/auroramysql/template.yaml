@@ -2,71 +2,70 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: 'AWS Service Broker - Amazon Aurora MySQL 5.6, 5.7 (qs-1pn9kr5a8)'
 
 ###############################################################################
-# MetaData - ServiceBroker 
-###############################################################################   
+# MetaData - ServiceBroker
+###############################################################################
 Metadata:
   AWS::ServiceBroker::Specification:
     Version: 1.0
     Tags:
-    - AWS    
+    - AWS
     - Aurora
     - MySQL
     - database
     Name: auroramysql
     DisplayName: Amazon Aurora MySQL
-    LongDescription: Amazon Aurora is a relational database service that combines the speed and 
-      availability of high-end commercial databases with the simplicity and cost-effectiveness of 
-      open source databases. The MySQL-compatible edition of Aurora delivers up to 5X the throughput 
-      of standard MySQL running on the same hardware, and enables existing MySQL applications and 
+    LongDescription: Amazon Aurora is a relational database service that combines the speed and
+      availability of high-end commercial databases with the simplicity and cost-effectiveness of
+      open source databases. The MySQL-compatible edition of Aurora delivers up to 5X the throughput
+      of standard MySQL running on the same hardware, and enables existing MySQL applications and
       tools to run without requiring modification.
     ImageUrl: https://s3.amazonaws.com/awsservicebroker/icons/AmazonAurora_LARGE.png
     DocumentationUrl: https://aws.amazon.com/rds/aurora/
     ProviderDisplayName: Amazon Web Services
     ServicePlans:
-      production:
-        DisplayName: Production
+      sign-production:
+        DisplayName: Sign Production
         Description: Configuration designed for production deployments
         LongDescription: Creates an Amazon Aurora MySQL database optimised for
           production use
         Cost: https://aws.amazon.com/rds/aurora/pricing/
-        ParameterValues:          
-          NumberOfAvailabilityZones: '3'
+        ParameterValues:
           NumberofAuroraReplicas: '2'
-          AvailabilityZones: Auto          
-          CidrSize: '27'
-          CidrBlocks: Auto
           DBName: Auto
           DBPort: 3306
-          StorageEncrypted: 'true'                    
+          StorageEncrypted: 'true'
           BackupRetentionPeriod: 35
-          MonitoringInterval: '1'          
+          MonitoringInterval: '1'
           AutoMinorVersionUpgrade: 'true'
           DBUsername: master
           DBPassword: Auto
-      dev:
-        DisplayName: Development
+          InboundSGName: '*-sgs-eks-workers-*'
+          SubnetName: '*-support-*'
+          VpcName: "*micro*"
+      sign-dev:
+        DisplayName: Sign Development
         Description: Configuration designed for development and testing deployments
         LongDescription: Creates an Amazon Aurora MySQL database optimised for
           dev/test use
         Cost: https://aws.amazon.com/rds/aurora/pricing/
-        ParameterValues:          
-          NumberOfAvailabilityZones: '2'
+        ParameterValues:
           NumberofAuroraReplicas: '1'
-          AvailabilityZones: Auto          
-          CidrSize: '28'
-          CidrBlocks: Auto
+          AvailabilityZones: Auto
           DBName: Auto
           DBPort: 3306
-          StorageEncrypted: 'true'                    
+          StorageEncrypted: 'true'
           BackupRetentionPeriod: 0
-          MonitoringInterval: '60'          
+          MonitoringInterval: '60'
           AutoMinorVersionUpgrade: 'true'
-          DBUsername: master          
+          DBUsername: master
           DBPassword: Auto
           PreferredBackupWindow: 04:00-06:00
           PreferredMaintenanceWindowDay: Sat
           PreferredMaintenanceWindowStartTime: 06:00
           PreferredMaintenanceWindowEndTime: 07:00
+          InboundSGName: '*-sgs-eks-workers-*'
+          SubnetName: '*-support-*'
+          VpcName: "*micro*"
       custom:
         DisplayName: Custom
         Description: Custom Configuration for Advanced deployments
@@ -81,42 +80,39 @@ Metadata:
 ###############################################################################
   AWS::CloudFormation::Interface:
     ParameterGroups:
-      -       
+      -
         Label:
           default: Network and Security
         Parameters:
-          - VpcId          
           - PubliclyAccessible
-          - AccessCidr
-          - CidrBlocks
-          - CidrSize
-          - AvailabilityZones
-          - NumberOfAvailabilityZones    
+          - VpcName
+          - InboundSGName
+          - SubnetName
       -
         Label:
           default: Database Instance Specification
         Parameters:
-          - DBInstanceClass    
+          - DBInstanceClass
       -
         Label:
           default: Database Replication
-        Parameters:     
-          - NumberofAuroraReplicas     
+        Parameters:
+          - NumberofAuroraReplicas
       -
         Label:
           default: Database Specification
-        Parameters:                  
-          - DBEngineVersion                                
+        Parameters:
+          - DBEngineVersion
           - DBEngineMode
           - DBName
           - DBPort
           - DBUsername
-          - DBPassword             
+          - DBPassword
       -
         Label:
           default: Database Parameters
-        Parameters:               
-          - AutoMinorVersionUpgrade    
+        Parameters:
+          - AutoMinorVersionUpgrade
           - MonitoringInterval
           - BackupRetentionPeriod
           - StorageEncrypted
@@ -125,32 +121,24 @@ Metadata:
       -
         Label:
           default: Severless Specification (only applicable if Engine Version is 'MySQL 5.6-compatible' and Engine Mode is 'Serverless')
-        Parameters:                  
-          - ServerlessMinCapacityUnit                                
+        Parameters:
+          - ServerlessMinCapacityUnit
           - ServerlessMaxCapacityUnit
           - ServerlessAutoPause
-          - ServerlessSecondsUntilAutoPause  
+          - ServerlessSecondsUntilAutoPause
       -
         Label:
           default: Maintainance Parameters
-        Parameters:               
-          - PreferredMaintenanceWindowDay    
+        Parameters:
+          - PreferredMaintenanceWindowDay
           - PreferredMaintenanceWindowStartTime
           - PreferredMaintenanceWindowEndTime
-                            
+
     ParameterLabels:
       DBUsername:
         default: Master Username
       DBPassword:
         default: Master User Password
-      CidrBlocks:
-        default: CIDR Blocks
-      CidrSize:
-        default: CIDR Size
-      AvailabilityZones:
-        default: Availability Zones
-      NumberOfAvailabilityZones:
-        default: Number Of Availability Zones
       DBPort:
         default: Port Number
       DBInstanceClass:
@@ -158,13 +146,9 @@ Metadata:
       DBEngineVersion:
        default: Engine Version
       DBEngineMode:
-        default: Engine Mode      
-      VpcId:
-        default: VPC Id
+        default: Engine Mode
       PubliclyAccessible:
         default: Publicly Accessible
-      AccessCidr:
-        default: Access CIDR            
       NumberofAuroraReplicas:
         default: Number of Aurora Replicas
       DeletionProtection:
@@ -193,20 +177,31 @@ Metadata:
         default: Pause compute capacity
       ServerlessSecondsUntilAutoPause:
         default: Pause after time of inactivity
+      InboundSGName:
+        default: Accessing Security Group
+      VpcName:
+        default: Vpc Name
+      SubnetName:
+        default: Subnet Name
 
 ###############################################################################
-# Parameters 
-###############################################################################   
+# Parameters
+###############################################################################
 Parameters:
-  
-  AccessCidr:
-    Description: CIDR block to allow to connect to database
-    Type: String    
 
-  AvailabilityZones:
-    Description: list of availability zones to use, must be the same quantity as specified. Leave as Auto for stack to determine AZ names available.      
-    Type: CommaDelimitedList
-    Default: Auto
+  VpcName:
+    Description: The name of the VPC to launch the Memcache cluster into
+    Type: String
+
+  SubnetName:
+    Description: String to match against existing subnets to place the cache
+      cluster in (glob wildcards allowed).
+    Type: String
+
+  InboundSGName:
+    Description: Existing Security Group name to allow access to database (glob
+      wildcards allowed).
+    Type: String
 
   AutoMinorVersionUpgrade:
     Description: Indicates that minor engine upgrades are applied automatically to
@@ -223,17 +218,6 @@ Parameters:
     Default: 35
     MinValue: 1
     MaxValue: 35
-    
-  CidrBlocks:
-    Description: comma seperated list of CIDR blocks to place RDS into, must be the
-      same quantity as specified in NumberOfAvailabilityZones
-    Type: CommaDelimitedList
-    Default: Auto
-
-  CidrSize:
-    Description: Size of Cidr block to allocate if CidrBlocks is set to Auto.
-    Type: String
-    Default: 27
 
   DBName:
     Description: The name of the database to create when the DB instance is created, will be autogenerated if set to "Auto".
@@ -251,7 +235,7 @@ Parameters:
     ConstraintDescription: 'Must be in the range [1150-65535]'
     MinValue: 1150
     MaxValue: 65535
-    
+
   DBUsername:
     Description: Database master username
     Type: String
@@ -281,8 +265,18 @@ Parameters:
     - 'Aurora-MySQL5.7-2.03.4.2'
     - 'Aurora-MySQL5.7-2.04.0'
     - 'Aurora-MySQL5.7-2.04.1'
-    - 'Aurora-MySQL5.7-2.04.1.2'      
-     
+    - 'Aurora-MySQL5.7-2.04.2'
+    - 'Aurora-MySQL5.7-2.04.3'
+    - 'Aurora-MySQL5.7-2.04.4'
+    - 'Aurora-MySQL5.7-2.04.5'
+    - 'Aurora-MySQL5.7-2.04.6'
+    - 'Aurora-MySQL5.7-2.04.7'
+    - 'Aurora-MySQL5.7-2.04.8'
+    - 'Aurora-MySQL5.7-2.05.0'
+    - 'Aurora-MySQL5.7-2.06.0'
+    - 'Aurora-MySQL5.7-2.07.0'
+    - 'Aurora-MySQL5.7-2.07.1'
+
   DBInstanceClass:
     Default: db.r4.large
     Description: Database Instance Class (Aurora MySQL supports the db.t3 instance classes for Aurora MySQL 1.15 and higher, and all Aurora MySQL 2.* versions). Not applicable if Engine Mode is Serverless.
@@ -314,7 +308,7 @@ Parameters:
     - db.t2.small
 
   DeletionProtection:
-    Description: Indicates if the DB cluster should have deletion protection enabled. 
+    Description: Indicates if the DB cluster should have deletion protection enabled.
     Type: String
     Default: 'false'
     AllowedValues:
@@ -329,25 +323,14 @@ Parameters:
     - 'provisioned'
     - 'serverless'
 
-  NumberOfAvailabilityZones:
-    Description: Quantity of subnets to use, if selecting more than 2 the region this
-      stack is in must have at least that many Availability Zones
-    Type: String
-    Default: '2'
-    AllowedValues:        
-    - '2' 
-    - '3'
-    - '4'
-    - '5'
-
   NumberofAuroraReplicas:
     Description: Number of Aurora Replicas to deploy in addition to the Primary. Not provisioned if engine mode is Serverless. If selecting 2 replicas, Number Of Availability Zones must be more than 2
     Type: String
     Default: '0'
-    AllowedValues:    
+    AllowedValues:
     - '0'
     - '1'
-    - '2'     
+    - '2'
 
   PubliclyAccessible:
     Description: Indicates whether the DB instance is an Internet-facing instance.
@@ -356,7 +339,7 @@ Parameters:
     AllowedValues:
     - 'true'
     - 'false'
-    
+
   MonitoringInterval:
     Description: The interval, in seconds, between points when Enhanced Monitoring
       metrics are collected for the DB instance.
@@ -369,7 +352,7 @@ Parameters:
     - '10'
     - '15'
     - '30'
-    - '60'  
+    - '60'
 
   PreferredMaintenanceWindowDay:
     Description: The day of the week which RDS maintenance will be performed
@@ -533,7 +516,7 @@ Parameters:
     - US/East-Indiana
     - US/Pacific
     - UTC
-  
+
   StorageEncrypted:
     Description: Indicates whether the DB instance is encrypted.
     Type: String
@@ -541,10 +524,6 @@ Parameters:
     AllowedValues:
     - 'true'
     - 'false'
-
-  VpcId:
-    Description: The ID of the VPC to launch the RDS instance into
-    Type: AWS::EC2::VPC::Id
 
   ServerlessMinCapacityUnit:
     Description: The minimum capacity for an Aurora DB cluster in serverless DB engine mode. The minimum capacity must be less than or equal to the maximum capacity.
@@ -572,8 +551,8 @@ Parameters:
     - '32'
     - '64'
     - '128'
-    - '256'  
-  
+    - '256'
+
   ServerlessAutoPause:
     Description: Specifies whether to allow or disallow automatic pause for an Aurora DB cluster in serverless DB engine mode. A DB cluster can be paused only when its idle (it has no connections).
     Type: String
@@ -588,19 +567,19 @@ Parameters:
     Default: 300
     MaxValue: 86400
     MinValue: 300
-      
-          
+
+
 ###############################################################################
 # Mappings
 ###############################################################################
- 
-Mappings: 
-  
-  DBFamilyMap: 
-    "Aurora-MySQL5.6.10a": 
+
+Mappings:
+
+  DBFamilyMap:
+    "Aurora-MySQL5.6.10a":
       "family" : "aurora5.6"
-    "Aurora-MySQL5.6-1.19.0": 
-      "family" : "aurora5.6"      
+    "Aurora-MySQL5.6-1.19.0":
+      "family" : "aurora5.6"
     "Aurora-MySQL5.7.12":
       "family" : "aurora-mysql5.7"
     "Aurora-MySQL5.7-2.03.2":
@@ -615,13 +594,33 @@ Mappings:
       "family" : "aurora-mysql5.7"
     "Aurora-MySQL5.7-2.04.1":
       "family" : "aurora-mysql5.7"
-    "Aurora-MySQL5.7-2.04.1.2":
+    "Aurora-MySQL5.7-2.04.2":
+      "family" : "aurora-mysql5.7"
+    "Aurora-MySQL5.7-2.04.3":
+      "family" : "aurora-mysql5.7"
+    "Aurora-MySQL5.7-2.04.4":
+      "family" : "aurora-mysql5.7"
+    "Aurora-MySQL5.7-2.04.5":
+      "family" : "aurora-mysql5.7"
+    "Aurora-MySQL5.7-2.04.6":
+      "family" : "aurora-mysql5.7"
+    "Aurora-MySQL5.7-2.04.7":
+      "family" : "aurora-mysql5.7"
+    "Aurora-MySQL5.7-2.04.8":
+      "family" : "aurora-mysql5.7"
+    "Aurora-MySQL5.7-2.05.0":
+      "family" : "aurora-mysql5.7"
+    "Aurora-MySQL5.7-2.06.0":
+      "family" : "aurora-mysql5.7"
+    "Aurora-MySQL5.7-2.07.0":
+      "family" : "aurora-mysql5.7"
+    "Aurora-MySQL5.7-2.07.1":
       "family" : "aurora-mysql5.7"
 
-  DBEngineVersionMap: 
-    "Aurora-MySQL5.6.10a": 
+  DBEngineVersionMap:
+    "Aurora-MySQL5.6.10a":
       "engineversion" : "5.6.10a"
-    "Aurora-MySQL5.6-1.19.0": 
+    "Aurora-MySQL5.6-1.19.0":
       "engineversion" : "5.6.mysql_aurora.1.19.0"
     "Aurora-MySQL5.7.12":
       "engineversion" : "5.7.12"
@@ -637,13 +636,33 @@ Mappings:
       "engineversion" : "5.7.mysql_aurora.2.04.0"
     "Aurora-MySQL5.7-2.04.1":
       "engineversion" : "5.7.mysql_aurora.2.04.1"
-    "Aurora-MySQL5.7-2.04.1.2":
-      "engineversion" : "5.7.mysql_aurora.2.04.1.2"
+    "Aurora-MySQL5.7-2.04.2":
+      "engineversion" : "5.7.mysql_aurora.2.04.2"
+    "Aurora-MySQL5.7-2.04.3":
+      "engineversion" : "5.7.mysql_aurora.2.04.3"
+    "Aurora-MySQL5.7-2.04.4":
+      "engineversion" : "5.7.mysql_aurora.2.04.4"
+    "Aurora-MySQL5.7-2.04.5":
+      "engineversion" : "5.7.mysql_aurora.2.04.5"
+    "Aurora-MySQL5.7-2.04.6":
+      "engineversion" : "5.7.mysql_aurora.2.04.6"
+    "Aurora-MySQL5.7-2.04.7":
+      "engineversion" : "5.7.mysql_aurora.2.04.7"
+    "Aurora-MySQL5.7-2.04.8":
+      "engineversion" : "5.7.mysql_aurora.2.04.8"
+    "Aurora-MySQL5.7-2.05.0":
+      "engineversion" : "5.7.mysql_aurora.2.05.0"
+    "Aurora-MySQL5.7-2.06.0":
+      "engineversion" : "5.7.mysql_aurora.2.06.0"
+    "Aurora-MySQL5.7-2.07.0":
+      "engineversion" : "5.7.mysql_aurora.2.07.0"
+    "Aurora-MySQL5.7-2.07.1":
+      "engineversion" : "5.7.mysql_aurora.2.07.1"
 
   DBEngineNameMap:
-    "Aurora-MySQL5.6.10a": 
+    "Aurora-MySQL5.6.10a":
       "enginename" : "aurora"
-    "Aurora-MySQL5.6-1.19.0": 
+    "Aurora-MySQL5.6-1.19.0":
       "enginename" : "aurora"
     "Aurora-MySQL5.7.12":
       "enginename" : "aurora-mysql"
@@ -659,37 +678,57 @@ Mappings:
       "enginename" : "aurora-mysql"
     "Aurora-MySQL5.7-2.04.1":
       "enginename" : "aurora-mysql"
-    "Aurora-MySQL5.7-2.04.1.2":
+    "Aurora-MySQL5.7-2.04.2":
       "enginename" : "aurora-mysql"
- 
-        
+    "Aurora-MySQL5.7-2.04.3":
+      "enginename" : "aurora-mysql"
+    "Aurora-MySQL5.7-2.04.4":
+      "enginename" : "aurora-mysql"
+    "Aurora-MySQL5.7-2.04.5":
+      "enginename" : "aurora-mysql"
+    "Aurora-MySQL5.7-2.04.6":
+      "enginename" : "aurora-mysql"
+    "Aurora-MySQL5.7-2.04.7":
+      "enginename" : "aurora-mysql"
+    "Aurora-MySQL5.7-2.04.8":
+      "enginename" : "aurora-mysql"
+    "Aurora-MySQL5.7-2.05.0":
+      "enginename" : "aurora-mysql"
+    "Aurora-MySQL5.7-2.06.0":
+      "enginename" : "aurora-mysql"
+    "Aurora-MySQL5.7-2.07.0":
+      "enginename" : "aurora-mysql"
+    "Aurora-MySQL5.7-2.07.1":
+      "enginename" : "aurora-mysql"
+
+
 ###############################################################################
 # Conditions
-############################################################################### 
-Conditions:  
+###############################################################################
+Conditions:
   EncryptionEnabled:
     !Equals
     - !Ref StorageEncrypted
     - 'true'
-  
+
   ServerlessEnabled:
     !Equals
     - !Ref DBEngineMode
-    - 'serverless'  
+    - 'serverless'
 
   ServerlessDisabled:
     !Equals
     - !Ref DBEngineMode
-    - 'provisioned'  
- 
-  1replica: 
+    - 'provisioned'
+
+  1replica:
     !Or
     - !Equals
       - !Ref NumberofAuroraReplicas
       - '1'
     - !Equals
       - !Ref NumberofAuroraReplicas
-      - '2'    
+      - '2'
 
   2replica:
     !Equals
@@ -706,44 +745,6 @@ Conditions:
    - !Condition ServerlessDisabled
    - !Condition 2replica
 
-  3az:
-    !Or
-    - !Equals
-      - !Ref NumberOfAvailabilityZones
-      - '3'
-    - !Equals
-      - !Ref NumberOfAvailabilityZones
-      - '4'
-    - !Equals
-      - !Ref NumberOfAvailabilityZones
-      - '5'
-  4az:
-    !Or
-    - !Equals
-      - !Ref NumberOfAvailabilityZones
-      - '4'
-    - !Equals
-      - !Ref NumberOfAvailabilityZones
-      - '5'
-  5az:
-    !Equals
-    - !Ref NumberOfAvailabilityZones
-    - '5'
-
-  AutoCidrs:
-    !Equals
-    - !Select
-      - 0
-      - !Ref CidrBlocks
-    - Auto
-
-  AutoAzs:
-    !Equals
-    - !Select
-      - 0
-      - !Ref AvailabilityZones
-    - Auto
-
   AutoPassword:
     !Equals
     - !Ref DBPassword
@@ -755,146 +756,34 @@ Conditions:
     - Auto
 
 ###############################################################################
-# Resources 
-###############################################################################   
-    
-Resources:     
+# Resources
+###############################################################################
 
-  MonitoringIAMRole: 
-    Type: AWS::IAM::Role    
-    Properties: 
-      AssumeRolePolicyDocument: 
+Resources:
+
+  MonitoringIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
         Version: "2012-10-17"
-        Statement: 
-          - 
+        Statement:
+          -
             Effect: "Allow"
-            Principal: 
-              Service: 
+            Principal:
+              Service:
                 - "monitoring.rds.amazonaws.com"
-            Action: 
+            Action:
               - "sts:AssumeRole"
       Path: "/"
-      ManagedPolicyArns: 
+      ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole
 
-  DBSubnet1:
-    Type: AWS::EC2::Subnet
-    Properties:
-      AvailabilityZone:
-        !Select
-        - 0
-        - !If
-          - AutoAzs
-          - !GetAtt AWSSBInjectedGetAzs.AvailabilityZones
-          - !Ref AvailabilityZones
-      VpcId: !Ref VpcId
-      CidrBlock:
-        !Select
-        - 0
-        - !If
-          - AutoCidrs
-          - !GetAtt AWSSBInjectedGetCidrs.CidrBlocks
-          - !Ref CidrBlocks
-          
-  DBSubnet2:
-    Type: AWS::EC2::Subnet
-    Properties:
-      AvailabilityZone:
-        !Select
-        - 1
-        - !If
-          - AutoAzs
-          - !GetAtt AWSSBInjectedGetAzs.AvailabilityZones
-          - !Ref AvailabilityZones
-      VpcId: !Ref VpcId
-      CidrBlock:
-        !Select
-        - 1
-        - !If
-          - AutoCidrs
-          - !GetAtt AWSSBInjectedGetCidrs.CidrBlocks
-          - !Ref CidrBlocks
-
-  DBSubnet3:
-    Condition: 3az
-    Type: AWS::EC2::Subnet
-    Properties:
-      AvailabilityZone:
-        !Select
-        - 2
-        - !If
-          - AutoAzs
-          - !GetAtt AWSSBInjectedGetAzs.AvailabilityZones
-          - !Ref AvailabilityZones
-      VpcId: !Ref VpcId
-      CidrBlock:
-        !Select
-        - 2
-        - !If
-          - AutoCidrs
-          - !GetAtt AWSSBInjectedGetCidrs.CidrBlocks
-          - !Ref CidrBlocks
-
-  DBSubnet4:
-    Condition: 4az
-    Type: AWS::EC2::Subnet
-    Properties:
-      AvailabilityZone:
-        !Select
-        - 3
-        - !If
-          - AutoAzs
-          - !GetAtt AWSSBInjectedGetAzs.AvailabilityZones
-          - !Ref AvailabilityZones
-      VpcId: !Ref VpcId
-      CidrBlock:
-        !Select
-        - 3
-        - !If
-          - AutoCidrs
-          - !GetAtt AWSSBInjectedGetCidrs.CidrBlocks
-          - !Ref CidrBlocks
-
-  DBSubnet5:
-    Condition: 5az
-    Type: AWS::EC2::Subnet
-    Properties:
-      AvailabilityZone:
-        !Select
-        - 4
-        - !If
-          - AutoAzs
-          - !GetAtt AWSSBInjectedGetAzs.AvailabilityZones
-          - !Ref AvailabilityZones
-      VpcId: !Ref VpcId
-      CidrBlock:
-        !Select
-        - 4
-        - !If
-          - AutoCidrs
-          - !GetAtt AWSSBInjectedGetCidrs.CidrBlocks
-          - !Ref CidrBlocks
-                 
   DBSubnetGroup:
     Type: 'AWS::RDS::DBSubnetGroup'
     Properties:
       DBSubnetGroupDescription: !Sub Database ${DBName}
-      SubnetIds:
-      - !Ref DBSubnet1
-      - !Ref DBSubnet2
-      - !If
-        - 3az
-        - !Ref DBSubnet3
-        - !Ref AWS::NoValue
-      - !If
-        - 4az
-        - !Ref DBSubnet4
-        - !Ref AWS::NoValue
-      - !If
-        - 5az
-        - !Ref DBSubnet5
-        - !Ref AWS::NoValue
-              
+      SubnetIds: !GetAtt AWSSBInjectedGetSubnetIds.SubnetIDs
+
   ClusterSecurityGroup:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
@@ -903,29 +792,29 @@ Resources:
       - IpProtocol: tcp
         FromPort: !Ref DBPort
         ToPort: !Ref DBPort
-        CidrIp: !Ref AccessCidr    
+        SourceSecurityGroupId: !GetAtt AWSSBInjectedGetSG.SecurityGroupId
       SecurityGroupEgress:
       - IpProtocol: '-1'
         FromPort: '-1'
         ToPort: '-1'
-        CidrIp: 0.0.0.0/0   
-      VpcId: !Ref VpcId
-        
+        CidrIp: 0.0.0.0/0
+      VpcId: !GetAtt AWSSBInjectedGetSubnetIds.VpcId
+
   ClusterSecurityGroupIngress:
     Type: 'AWS::EC2::SecurityGroupIngress'
     Properties:
       GroupId: !GetAtt 'ClusterSecurityGroup.GroupId'
       IpProtocol: -1
       SourceSecurityGroupId: !Ref ClusterSecurityGroup
-      Description: 'Self Reference'        
-      
+      Description: 'Self Reference'
+
   RDSDBClusterParameterGroup:
     Type: AWS::RDS::DBClusterParameterGroup
     Properties:
       Description: !Join [ "- ", [ "Aurora PG Cluster Parameter Group for Cloudformation Stack ", !Ref DBName ] ]
-      Family: !FindInMap [DBFamilyMap, !Ref DBEngineVersion, "family"] 
-      Parameters:        
-        time_zone: !Ref RDSTimeZone    
+      Family: !FindInMap [DBFamilyMap, !Ref DBEngineVersion, "family"]
+      Parameters:
+        time_zone: !Ref RDSTimeZone
 
   AuroraKMSCMK:
     Type: 'AWS::KMS::Key'
@@ -963,14 +852,14 @@ Resources:
     Properties:
       AliasName: !Sub 'alias/${AuroraDBCluster}'
       TargetKeyId: !Ref AuroraKMSCMK
-        
+
   AuroraDBCluster:
     Type: AWS::RDS::DBCluster
     DeletionPolicy: Snapshot
     UpdateReplacePolicy: Snapshot
     Properties:
-      Engine:  !FindInMap [DBEngineNameMap, !Ref DBEngineVersion, "enginename"] 
-      EngineVersion: !FindInMap [DBEngineVersionMap, !Ref DBEngineVersion, "engineversion"] 
+      Engine:  !FindInMap [DBEngineNameMap, !Ref DBEngineVersion, "enginename"]
+      EngineVersion: !FindInMap [DBEngineVersionMap, !Ref DBEngineVersion, "engineversion"]
       EngineMode: !Ref DBEngineMode
       ScalingConfiguration:  !If
         - ServerlessEnabled
@@ -979,101 +868,92 @@ Resources:
           MinCapacity: !Ref ServerlessMinCapacityUnit
           SecondsUntilAutoPause: !Ref ServerlessSecondsUntilAutoPause
         - !Ref AWS::NoValue
-      DatabaseName: 
+      DatabaseName:
         !If
         - AutoDBName
         - !GetAtt AWSSBInjectedGenerateDBName.DBName
         - !Ref DBName
       Port: !Ref DBPort
-      MasterUsername: !Ref DBUsername        
-      MasterUserPassword: 
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword:
         !If
         - AutoPassword
         - !GetAtt AWSSBInjectedGeneratePassword.MasterUserPassword
-        - !Ref DBPassword  
+        - !Ref DBPassword
       DBSubnetGroupName: !Ref DBSubnetGroup
       VpcSecurityGroupIds:
-      - !Ref ClusterSecurityGroup  
+      - !Ref ClusterSecurityGroup
       BackupRetentionPeriod: !Ref BackupRetentionPeriod
-      DBClusterParameterGroupName: !Ref RDSDBClusterParameterGroup      
-      StorageEncrypted: !Ref StorageEncrypted      
+      DBClusterParameterGroupName: !Ref RDSDBClusterParameterGroup
+      StorageEncrypted: !Ref StorageEncrypted
       KmsKeyId:  !If
         - EncryptionEnabled
         - !GetAtt AuroraKMSCMK.Arn
         - !Ref AWS::NoValue
       DeletionProtection: !Ref DeletionProtection
       PreferredMaintenanceWindow: !Sub ${PreferredMaintenanceWindowDay}:${PreferredMaintenanceWindowStartTime}-${PreferredMaintenanceWindowDay}:${PreferredMaintenanceWindowEndTime}
-        
-  AuroraDBPrimaryInstance:    
+
+  AuroraDBPrimaryInstance:
     Condition: ServerlessDisabled
     Type: AWS::RDS::DBInstance
-    Properties:      
+    Properties:
       DBInstanceClass:
         Ref: DBInstanceClass
-      DBClusterIdentifier: !Ref AuroraDBCluster  
-      Engine:  !FindInMap [DBEngineNameMap, !Ref DBEngineVersion, "enginename"]           
+      DBClusterIdentifier: !Ref AuroraDBCluster
+      Engine:  !FindInMap [DBEngineNameMap, !Ref DBEngineVersion, "enginename"]
       MonitoringInterval: !Ref MonitoringInterval
-      MonitoringRoleArn: !GetAtt MonitoringIAMRole.Arn      
+      MonitoringRoleArn: !GetAtt MonitoringIAMRole.Arn
       AutoMinorVersionUpgrade: !Ref AutoMinorVersionUpgrade
       DBSubnetGroupName: !Ref DBSubnetGroup
-      PubliclyAccessible: !Ref PubliclyAccessible      
+      PubliclyAccessible: !Ref PubliclyAccessible
       AvailabilityZone:
         !Select
         - 0
-        - !If
-          - AutoAzs
-          - !GetAtt AWSSBInjectedGetAzs.AvailabilityZones
-          - !Ref AvailabilityZones
+        - !GetAtt AWSSBInjectedGetSubnetIds.AvailabilityZones
 
   AuroraDBReplicaOneInstance:
-    Condition: CanCreate1Replica     
+    Condition: CanCreate1Replica
     Type: AWS::RDS::DBInstance
-    DependsOn: 
+    DependsOn:
       - AuroraDBPrimaryInstance
-    Properties:      
+    Properties:
       DBInstanceClass:
         Ref: DBInstanceClass
-      DBClusterIdentifier: !Ref AuroraDBCluster  
-      Engine:  !FindInMap [DBEngineNameMap, !Ref DBEngineVersion, "enginename"] 
+      DBClusterIdentifier: !Ref AuroraDBCluster
+      Engine:  !FindInMap [DBEngineNameMap, !Ref DBEngineVersion, "enginename"]
       MonitoringInterval: !Ref MonitoringInterval
-      MonitoringRoleArn: !GetAtt MonitoringIAMRole.Arn      
+      MonitoringRoleArn: !GetAtt MonitoringIAMRole.Arn
       AutoMinorVersionUpgrade: !Ref AutoMinorVersionUpgrade
       DBSubnetGroupName: !Ref DBSubnetGroup
-      PubliclyAccessible: !Ref PubliclyAccessible      
+      PubliclyAccessible: !Ref PubliclyAccessible
       AvailabilityZone:
         !Select
         - 1
-        - !If
-          - AutoAzs
-          - !GetAtt AWSSBInjectedGetAzs.AvailabilityZones
-          - !Ref AvailabilityZones                
+        - !GetAtt AWSSBInjectedGetSubnetIds.AvailabilityZones
 
   AuroraDBReplicaTwoInstance:
-    Condition: CanCreate2Replica    
+    Condition: CanCreate2Replica
     Type: AWS::RDS::DBInstance
-    DependsOn: 
+    DependsOn:
       - AuroraDBPrimaryInstance
-    Properties:      
+    Properties:
       DBInstanceClass:
         Ref: DBInstanceClass
-      DBClusterIdentifier: !Ref AuroraDBCluster  
-      Engine:  !FindInMap [DBEngineNameMap, !Ref DBEngineVersion, "enginename"] 
+      DBClusterIdentifier: !Ref AuroraDBCluster
+      Engine:  !FindInMap [DBEngineNameMap, !Ref DBEngineVersion, "enginename"]
       MonitoringInterval: !Ref MonitoringInterval
-      MonitoringRoleArn: !GetAtt MonitoringIAMRole.Arn      
+      MonitoringRoleArn: !GetAtt MonitoringIAMRole.Arn
       AutoMinorVersionUpgrade: !Ref AutoMinorVersionUpgrade
       DBSubnetGroupName: !Ref DBSubnetGroup
-      PubliclyAccessible: !Ref PubliclyAccessible      
+      PubliclyAccessible: !Ref PubliclyAccessible
       AvailabilityZone:
         !Select
         - 2
-        - !If
-          - AutoAzs
-          - !GetAtt AWSSBInjectedGetAzs.AvailabilityZones
-          - !Ref AvailabilityZones
+        - !GetAtt AWSSBInjectedGetSubnetIds.AvailabilityZones
 
 ###############################################################################
 # Injected Lambdas
-############################################################################### 
+###############################################################################
 
   AWSSBInjectedLambdaZipsBucket:
     Type: AWS::S3::Bucket
@@ -1085,12 +965,13 @@ Resources:
       ServiceToken: !GetAtt AWSSBInjectedCopyZipsLambda.Arn
       DestBucket: !Ref AWSSBInjectedLambdaZipsBucket
       SourceBucket: micro-aws-servicebroker-templates
-      Prefix: functions/
+      Prefix: ""
       Objects:
-      - get_cidrs/lambda_function.zip
-      - get_azs/lambda_function.zip
-      - generate_password/lambda_function.zip
-      - generate_dbname/lambda_function.zip
+      - functions/generate_password/lambda_function.zip
+      - functions/generate_dbname/lambda_function.zip
+      - functions/get_subnet_ids/lambda_function.zip
+      - functions/get_sg/lambda_function.zip
+      - layers/requests/lambda_layer.zip
   AWSSBInjectedCopyZipsRole:
     Type: AWS::IAM::Role
     Properties:
@@ -1125,7 +1006,7 @@ Resources:
     Properties:
       Description: Copies objects from a source S3 bucket to a destination
       Handler: index.handler
-      Runtime: python2.7
+      Runtime: python3.7
       Role: !GetAtt AWSSBInjectedCopyZipsRole.Arn
       Timeout: 240
       Code:
@@ -1182,8 +1063,7 @@ Resources:
               finally:
                   timer.cancel()
                   cfnresponse.send(event, context, status, {}, None)
-  AWSSBInjectedGetCidrsRole:
-    Condition: AutoCidrs
+  AWSSBInjectedGetSubnetIdsRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -1197,7 +1077,7 @@ Resources:
           - sts:AssumeRole
       Path: /
       Policies:
-      - PolicyName: cfn_utility_get_cidrs
+      - PolicyName: cfn_utility_get_subnet_ids
         PolicyDocument:
           Version: '2012-10-17'
           Statement:
@@ -1205,36 +1085,33 @@ Resources:
             Action:
             - ec2:DescribeVpcs
             - ec2:DescribeSubnets
-            - ec2:DescribeAvailabilityZones
             - logs:CreateLogGroup
             - logs:CreateLogStream
             - logs:PutLogEvents
             Resource: '*'
-  AWSSBInjectedGetCidrsLambda:
+  AWSSBInjectedGetSubnetIdsLambda:
     DependsOn: AWSSBInjectedCopyZips
-    Condition: AutoCidrs
     Type: AWS::Lambda::Function
     Properties:
       Handler: lambda_function.handler
       Role:
         Fn::GetAtt:
-        - AWSSBInjectedGetCidrsRole
+        - AWSSBInjectedGetSubnetIdsRole
         - Arn
       Code:
         S3Bucket: !Ref AWSSBInjectedLambdaZipsBucket
-        S3Key: functions/get_cidrs/lambda_function.zip
-      Runtime: python2.7
+        S3Key: functions/get_subnet_ids/lambda_function.zip
+      Runtime: python3.7
       Timeout: '60'
-  AWSSBInjectedGetCidrs:
-    Condition: AutoCidrs
+      Layers:
+        - !Ref AWSSBRequestsLambdaLayer
+  AWSSBInjectedGetSubnetIds:
     Type: AWS::CloudFormation::CustomResource
     Properties:
-      ServiceToken: !GetAtt AWSSBInjectedGetCidrsLambda.Arn
-      Qty: !Ref NumberOfAvailabilityZones
-      VpcId: !Ref VpcId
-      CidrSize: !Ref CidrSize
-  AWSSBInjectedGetAzsRole:
-    Condition: AutoAzs
+      ServiceToken: !GetAtt AWSSBInjectedGetSubnetIdsLambda.Arn
+      VpcName: !Ref VpcName
+      SubnetName: !Ref SubnetName
+  AWSSBInjectedGetSGRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -1248,38 +1125,38 @@ Resources:
           - sts:AssumeRole
       Path: /
       Policies:
-      - PolicyName: cfn_utility_get_cidrs
+      - PolicyName: cfn_utility_get_sg
         PolicyDocument:
           Version: '2012-10-17'
           Statement:
           - Effect: Allow
             Action:
-            - ec2:DescribeAvailabilityZones
+            - ec2:DescribeSecurityGroups
             - logs:CreateLogGroup
             - logs:CreateLogStream
             - logs:PutLogEvents
             Resource: '*'
-  AWSSBInjectedGetAzsLambda:
+  AWSSBInjectedGetSGLambda:
     DependsOn: AWSSBInjectedCopyZips
-    Condition: AutoAzs
     Type: AWS::Lambda::Function
     Properties:
       Handler: lambda_function.handler
       Role:
         Fn::GetAtt:
-        - AWSSBInjectedGetAzsRole
+        - AWSSBInjectedGetSGRole
         - Arn
       Code:
         S3Bucket: !Ref AWSSBInjectedLambdaZipsBucket
-        S3Key: functions/get_azs/lambda_function.zip
-      Runtime: python2.7
+        S3Key: functions/get_sg/lambda_function.zip
+      Runtime: python3.7
       Timeout: '60'
-  AWSSBInjectedGetAzs:
-    Condition: AutoAzs
+      Layers:
+        - !Ref AWSSBRequestsLambdaLayer
+  AWSSBInjectedGetSG:
     Type: AWS::CloudFormation::CustomResource
     Properties:
-      ServiceToken: !GetAtt AWSSBInjectedGetAzsLambda.Arn
-      Qty: !Ref NumberOfAvailabilityZones
+      ServiceToken: !GetAtt AWSSBInjectedGetSGLambda.Arn
+      SGName: !Ref InboundSGName
   AWSSBInjectedGeneratePasswordRole:
     Type: AWS::IAM::Role
     Properties:
@@ -1316,8 +1193,10 @@ Resources:
       Code:
         S3Bucket: !Ref AWSSBInjectedLambdaZipsBucket
         S3Key: functions/generate_password/lambda_function.zip
-      Runtime: python3.6
+      Runtime: python3.7
       Timeout: '60'
+      Layers:
+        - !Ref AWSSBRequestsLambdaLayer
   AWSSBInjectedGeneratePassword:
     Type: AWS::CloudFormation::CustomResource
     Properties:
@@ -1359,17 +1238,31 @@ Resources:
       Code:
         S3Bucket: !Ref AWSSBInjectedLambdaZipsBucket
         S3Key: functions/generate_dbname/lambda_function.zip
-      Runtime: python3.6
+      Runtime: python3.7
       Timeout: '60'
+      Layers:
+        - !Ref AWSSBRequestsLambdaLayer
   AWSSBInjectedGenerateDBName:
     Type: AWS::CloudFormation::CustomResource
     Properties:
       ServiceToken: !GetAtt AWSSBInjectedGenerateDBNameLambda.Arn
       Length: 32
+  AWSSBRequestsLambdaLayer:
+    DependsOn: AWSSBInjectedCopyZips
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      CompatibleRuntimes:
+        - python3.7
+      Content:
+        S3Bucket: !Ref AWSSBInjectedLambdaZipsBucket
+        S3Key: layers/requests/lambda_layer.zip
+      Description: Contains requests and cfnresponse.send()
+      LayerName: requests
+      LicenseInfo: Apache License v2.0, AWS Customer Agreement
 
 ###############################################################################
-# Outputs 
-###############################################################################   
+# Outputs
+###############################################################################
 Outputs:
   ClusterEndpoint:
     Description: 'Aurora Cluster/Writer Endpoint'
@@ -1384,6 +1277,7 @@ Outputs:
   DBUsername:
     Description: 'Database master username'
     Value: !Ref DBUsername
+# TODO: This needs to go.
   DBPassword:
    Value:
       !If
