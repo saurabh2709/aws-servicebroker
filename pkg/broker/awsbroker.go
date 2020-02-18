@@ -11,7 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/awslabs/aws-servicebroker/pkg/dynamodbadapter"
+	"github.com/adobe-platform/aws-servicebroker/pkg/dynamodbadapter"
 	"github.com/go-errors/errors"
 	"github.com/golang/glog"
 	"github.com/koding/cache"

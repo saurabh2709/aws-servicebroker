@@ -13,7 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ssm/ssmiface"
 	"github.com/aws/aws-sdk-go/service/sts"
 	"github.com/aws/aws-sdk-go/service/sts/stsiface"
-	"github.com/awslabs/aws-servicebroker/pkg/serviceinstance"
+	"github.com/adobe-platform/aws-servicebroker/pkg/serviceinstance"
 	"github.com/koding/cache"
 	osb "github.com/pmorie/go-open-service-broker-client/v2"
 	"github.com/satori/go.uuid"

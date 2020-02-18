@@ -22,6 +22,16 @@ Metadata:
     ImageUrl: https://s3.amazonaws.com/awsservicebroker/icons/AmazonAurora_LARGE.png
     DocumentationUrl: https://aws.amazon.com/rds/aurora/
     ProviderDisplayName: Amazon Web Services
+    UpdatableParameters:
+      - ArchPathTag
+      - EnvironmentTag
+      - OwnerTag
+      - CostCenterTag
+      - DataClassificationTag
+      - PCIDataTag
+      - PreferredMaintenanceWindowDay
+      - PreferredMaintenanceWindowStartTime
+      - PreferredMaintenanceWindowEndTime
     ServicePlans:
       sign-production:
         DisplayName: Sign Production
@@ -42,6 +52,7 @@ Metadata:
           InboundSGName: '*-sgs-eks-workers-*'
           SubnetName: '*-support-*'
           VpcName: "*micro*"
+          CostCenterTag: 102449
       sign-dev:
         DisplayName: Sign Development
         Description: Configuration designed for development and testing deployments
@@ -59,13 +70,13 @@ Metadata:
           AutoMinorVersionUpgrade: 'true'
           DBUsername: master
           DBPassword: Auto
-          PreferredBackupWindow: 04:00-06:00
           PreferredMaintenanceWindowDay: Sat
           PreferredMaintenanceWindowStartTime: 06:00
           PreferredMaintenanceWindowEndTime: 07:00
           InboundSGName: '*-sgs-eks-workers-*'
           SubnetName: '*-support-*'
           VpcName: "*micro*"
+          CostCenterTag: 102449
       custom:
         DisplayName: Custom
         Description: Custom Configuration for Advanced deployments
@@ -134,6 +145,16 @@ Metadata:
           - PreferredMaintenanceWindowStartTime
           - PreferredMaintenanceWindowEndTime
 
+        Label:
+          default: Adobe Tags
+        Parameters:
+          - ArchPathTag
+          - EnvironmentTag
+          - OwnerTag
+          - CostCenterTag
+          - DataClassificationTag
+          - PCIDataTag
+
     ParameterLabels:
       DBUsername:
         default: Master Username
@@ -183,6 +204,18 @@ Metadata:
         default: Vpc Name
       SubnetName:
         default: Subnet Name
+      ArchPathTag:
+        default: Cloud Resource Tagging Standard ArchPath
+      EnvironmentTag:
+        default: Cloud Resource Tagging Standard EnvironmentTag
+      OwnerTag:
+        default: Cloud Resource Tagging Standard Owner
+      CostCenterTag:
+        default: Cloud Resource Tagging Standard Cost Center
+      DataClassificationTag:
+        default: Cloud Resource Tagging Standard Data Classification Tag
+      PCIDataTag:
+        default: Cloud Resource Tagging Standard PCI Data Tag
 
 ###############################################################################
 # Parameters
@@ -568,6 +601,29 @@ Parameters:
     MaxValue: 86400
     MinValue: 300
 
+  ArchPathTag:
+    Description: Cloud Resource Tagging Standard ArchPath
+    Type: String
+
+  EnvironmentTag:
+    Description: Cloud Resource Tagging Standard EnvironmentTag
+    Type: String
+
+  OwnerTag:
+    Description: Cloud Resource Tagging Standard Owner
+    Type: String
+
+  CostCenterTag:
+    Description: Cloud Resource Tagging Standard Cost Center
+    Type: String
+
+  DataClassificationTag:
+    Description: Cloud Resource Tagging Standard Data Classification Tag
+    Type: String
+
+  PCIDataTag:
+    Description: Cloud Resource Tagging Standard PCI Data Tag
+    Type: String
 
 ###############################################################################
 # Mappings
@@ -892,6 +948,19 @@ Resources:
         - !Ref AWS::NoValue
       DeletionProtection: !Ref DeletionProtection
       PreferredMaintenanceWindow: !Sub ${PreferredMaintenanceWindowDay}:${PreferredMaintenanceWindowStartTime}-${PreferredMaintenanceWindowDay}:${PreferredMaintenanceWindowEndTime}
+      Tags:
+        - Key: Adobe.ArchPath
+          Value: !Ref ArchPathTag
+        - Key: Adobe.Environment
+          Value: !Ref EnvironmentTag
+        - Key: Adobe.Owner
+          Value: !Ref OwnerTag
+        - Key: Adobe.CostCenter
+          Value: !Ref CostCenterTag
+        - Key: Adobe.DataClassification
+          Value: !Ref DataClassificationTag
+        - Key: Adobe.PCIData
+          Value: !Ref PCIDataTag
 
   AuroraDBPrimaryInstance:
     Condition: ServerlessDisabled
@@ -910,6 +979,19 @@ Resources:
         !Select
         - 0
         - !GetAtt AWSSBInjectedGetSubnetIds.AvailabilityZones
+      Tags:
+        - Key: Adobe.ArchPath
+          Value: !Ref ArchPathTag
+        - Key: Adobe.Environment
+          Value: !Ref EnvironmentTag
+        - Key: Adobe.Owner
+          Value: !Ref OwnerTag
+        - Key: Adobe.CostCenter
+          Value: !Ref CostCenterTag
+        - Key: Adobe.DataClassification
+          Value: !Ref DataClassificationTag
+        - Key: Adobe.PCIData
+          Value: !Ref PCIDataTag
 
   AuroraDBReplicaOneInstance:
     Condition: CanCreate1Replica
@@ -930,6 +1012,19 @@ Resources:
         !Select
         - 1
         - !GetAtt AWSSBInjectedGetSubnetIds.AvailabilityZones
+      Tags:
+        - Key: Adobe.ArchPath
+          Value: !Ref ArchPathTag
+        - Key: Adobe.Environment
+          Value: !Ref EnvironmentTag
+        - Key: Adobe.Owner
+          Value: !Ref OwnerTag
+        - Key: Adobe.CostCenter
+          Value: !Ref CostCenterTag
+        - Key: Adobe.DataClassification
+          Value: !Ref DataClassificationTag
+        - Key: Adobe.PCIData
+          Value: !Ref PCIDataTag
 
   AuroraDBReplicaTwoInstance:
     Condition: CanCreate2Replica
@@ -950,6 +1045,19 @@ Resources:
         !Select
         - 2
         - !GetAtt AWSSBInjectedGetSubnetIds.AvailabilityZones
+      Tags:
+        - Key: Adobe.ArchPath
+          Value: !Ref ArchPathTag
+        - Key: Adobe.Environment
+          Value: !Ref EnvironmentTag
+        - Key: Adobe.Owner
+          Value: !Ref OwnerTag
+        - Key: Adobe.CostCenter
+          Value: !Ref CostCenterTag
+        - Key: Adobe.DataClassification
+          Value: !Ref DataClassificationTag
+        - Key: Adobe.PCIData
+          Value: !Ref PCIDataTag
 
 ###############################################################################
 # Injected Lambdas

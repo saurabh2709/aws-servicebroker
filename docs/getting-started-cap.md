@@ -58,7 +58,7 @@ openssl rsa -in tls.key.encrypted -passin pass:1234 -out tls.key
 Sign the request with the CA certificate:
 
 openssl x509 -req -CA ca.pem -CAkey ca.key -CAcreateserial -in tls.req -out tls.pem
-Install the AWS service broker as documented at https://github.com/awslabs/aws-servicebroker/blob/master/docs/getting-started-k8s.md. Skip the installation of the Kubernetes Service Catalog. While installing the AWS Service Broker, make sure to update the Helm chart version (the version as of this writing is 1.0.0-beta.3). For the broker install, pass in a value indicating the Cluster Service Broker should not be installed (for example --set deployClusterServiceBroker=false). Ensure an account and role with adequate IAM rights is chosen (see Section 10.12.1, “Prerequisites”:
+Install the AWS service broker as documented at https://github.com/adobe-platform/aws-servicebroker/blob/master/docs/getting-started-k8s.md. Skip the installation of the Kubernetes Service Catalog. While installing the AWS Service Broker, make sure to update the Helm chart version (the version as of this writing is 1.0.0-beta.3). For the broker install, pass in a value indicating the Cluster Service Broker should not be installed (for example --set deployClusterServiceBroker=false). Ensure an account and role with adequate IAM rights is chosen (see Section 10.12.1, “Prerequisites”:
 
 helm install aws-sb/aws-servicebroker \
 	     --name aws-servicebroker \
@@ -96,7 +96,7 @@ cf service-brokers
 List the available service plans:
 
 cf service-access
-Enable access to a service. This example uses the -p to enable access to a specific service plan. See https://github.com/awslabs/aws-servicebroker/blob/master/templates/rdsmysql/template.yaml for information about all available services and their associated plans:
+Enable access to a service. This example uses the -p to enable access to a specific service plan. See https://github.com/adobe-platform/aws-servicebroker/blob/master/templates/rdsmysql/template.yaml for information about all available services and their associated plans:
 
 cf enable-service-access rdsmysql -p custom
 Create a service instance. As an example, a custom MySQL instance can be created as:

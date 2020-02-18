@@ -8,7 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
 	"github.com/aws/aws-sdk-go/service/dynamodb/expression"
-	"github.com/awslabs/aws-servicebroker/pkg/serviceinstance"
+	"github.com/adobe-platform/aws-servicebroker/pkg/serviceinstance"
 	"github.com/golang/glog"
 	osb "github.com/pmorie/go-open-service-broker-client/v2"
 	uuid "github.com/satori/go.uuid"
