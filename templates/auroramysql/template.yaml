@@ -837,28 +837,43 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
-        Version: "2012-10-17"
+        Version: 2012-10-17
         Statement:
           -
-            Effect: "Allow"
+            Effect: Allow
             Principal:
               Service:
-                - "monitoring.rds.amazonaws.com"
+                - monitoring.rds.amazonaws.com
             Action:
               - "sts:AssumeRole"
-      Path: "/"
+      Path: /
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole
 
+  DBUserPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Join [ "-", [ DB_User, !Ref ArchPathTag, !Ref DBName ] ]
+      Description: Managed Policy for access to service broker created Aurora MySQL database
+      Path: /
+      PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Action:
+              - rds-db:connect
+            Resource:
+              - !GetAtt AWSSBInjectedAddDbUsers.User
+
   DBSubnetGroup:
     #TODO: Clean up unnecessary single quotes.
-    Type: 'AWS::RDS::DBSubnetGroup'
+    Type: AWS::RDS::DBSubnetGroup
     Properties:
       DBSubnetGroupDescription: !Sub Database ${DBName}
       SubnetIds: !GetAtt AWSSBInjectedGetSubnetIds.SubnetIDs
 
   ClusterSecurityGroup:
-    Type: 'AWS::EC2::SecurityGroup'
+    Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: !Sub Allow Client connections to Database ${DBName}
       SecurityGroupIngress:
@@ -891,22 +906,22 @@ Resources:
       VpcId: !GetAtt AWSSBInjectedGetSubnetIds.VpcId
 
   ClusterSecurityGroupIngress:
-    Type: 'AWS::EC2::SecurityGroupIngress'
+    Type: AWS::EC2::SecurityGroupIngress
     Properties:
-      GroupId: !GetAtt 'ClusterSecurityGroup.GroupId'
+      GroupId: !GetAtt ClusterSecurityGroup.GroupId
       IpProtocol: -1
       SourceSecurityGroupId: !Ref ClusterSecurityGroup
-      Description: 'Self Reference'
+      Description: Self Reference
 
   ClusterSecurityGroupLambdaIngress:
-    Type: 'AWS::EC2::SecurityGroupIngress'
+    Type: AWS::EC2::SecurityGroupIngress
     Properties:
-      GroupId: !GetAtt 'ClusterSecurityGroup.GroupId'
+      GroupId: !GetAtt ClusterSecurityGroup.GroupId
       FromPort: !Ref DBPort
       ToPort: !Ref DBPort
       IpProtocol: tcp
       SourceSecurityGroupId: !Ref LambdaSecurityGroup
-      Description: 'Lambda Inbound'
+      Description: Lambda Inbound
 
   RDSDBClusterParameterGroup:
     Type: AWS::RDS::DBClusterParameterGroup
@@ -917,7 +932,7 @@ Resources:
         time_zone: !Ref RDSTimeZone
 
   AuroraKMSCMK:
-    Type: 'AWS::KMS::Key'
+    Type: AWS::KMS::Key
     DeletionPolicy: Retain
     Properties:
       KeyPolicy:
@@ -932,21 +947,21 @@ Resources:
           Principal:
             AWS: '*'
           Action:
-          - 'kms:Encrypt'
-          - 'kms:Decrypt'
-          - 'kms:ReEncrypt*'
-          - 'kms:GenerateDataKey*'
-          - 'kms:CreateGrant'
-          - 'kms:ListGrants'
-          - 'kms:DescribeKey'
+          - kms:Encrypt
+          - kms:Decrypt
+          - kms:ReEncrypt*
+          - kms:GenerateDataKey*
+          - kms:CreateGrant
+          - kms:ListGrants
+          - kms:DescribeKey
           Resource: '*'
           Condition:
             StringEquals:
-              'kms:CallerAccount': !Ref 'AWS::AccountId'
-              'kms:ViaService': !Sub 'rds.${AWS::Region}.amazonaws.com'
+              kms:CallerAccount: !Ref AWS::AccountId
+              kms:ViaService: !Sub 'rds.${AWS::Region}.amazonaws.com'
 
   AuroraKMSCMKAlias:
-    Type: 'AWS::KMS::Alias'
+    Type: AWS::KMS::Alias
     DeletionPolicy: Retain
     DependsOn: AuroraDBCluster
     Properties:
@@ -958,8 +973,8 @@ Resources:
     DeletionPolicy: Snapshot
     UpdateReplacePolicy: Snapshot
     Properties:
-      Engine:  !FindInMap [DBEngineNameMap, !Ref DBEngineVersion, "enginename"]
-      EngineVersion: !FindInMap [DBEngineVersionMap, !Ref DBEngineVersion, "engineversion"]
+      Engine:  !FindInMap [DBEngineNameMap, !Ref DBEngineVersion, enginename]
+      EngineVersion: !FindInMap [DBEngineVersionMap, !Ref DBEngineVersion, engineversion]
       EngineMode: !Ref DBEngineMode
       EnableIAMDatabaseAuthentication: !If [IamEnabled, 'true', 'false']
       ScalingConfiguration:  !If
@@ -1014,7 +1029,7 @@ Resources:
       DBInstanceClass:
         Ref: DBInstanceClass
       DBClusterIdentifier: !Ref AuroraDBCluster
-      Engine:  !FindInMap [DBEngineNameMap, !Ref DBEngineVersion, "enginename"]
+      Engine:  !FindInMap [DBEngineNameMap, !Ref DBEngineVersion, enginename]
       MonitoringInterval: !Ref MonitoringInterval
       MonitoringRoleArn: !GetAtt MonitoringIAMRole.Arn
       AutoMinorVersionUpgrade: !Ref AutoMinorVersionUpgrade
@@ -1047,7 +1062,7 @@ Resources:
       DBInstanceClass:
         Ref: DBInstanceClass
       DBClusterIdentifier: !Ref AuroraDBCluster
-      Engine:  !FindInMap [DBEngineNameMap, !Ref DBEngineVersion, "enginename"]
+      Engine:  !FindInMap [DBEngineNameMap, !Ref DBEngineVersion, enginename]
       MonitoringInterval: !Ref MonitoringInterval
       MonitoringRoleArn: !GetAtt MonitoringIAMRole.Arn
       AutoMinorVersionUpgrade: !Ref AutoMinorVersionUpgrade
@@ -1080,7 +1095,7 @@ Resources:
       DBInstanceClass:
         Ref: DBInstanceClass
       DBClusterIdentifier: !Ref AuroraDBCluster
-      Engine:  !FindInMap [DBEngineNameMap, !Ref DBEngineVersion, "enginename"]
+      Engine:  !FindInMap [DBEngineNameMap, !Ref DBEngineVersion, enginename]
       MonitoringInterval: !Ref MonitoringInterval
       MonitoringRoleArn: !GetAtt MonitoringIAMRole.Arn
       AutoMinorVersionUpgrade: !Ref AutoMinorVersionUpgrade
@@ -1340,7 +1355,9 @@ Resources:
             Resource: '*'
   AWSSBInjectedAddDbUsersLambda:
     Condition: IamEnabled
-    DependsOn: AWSSBInjectedCopyZips
+    DependsOn:
+      - AWSSBInjectedCopyZips
+      - AuroraDBPrimaryInstance
     Type: AWS::Lambda::Function
     Properties:
       Handler: lambda_function.handler
@@ -1352,7 +1369,7 @@ Resources:
         S3Bucket: !Ref AWSSBInjectedLambdaZipsBucket
         S3Key: functions/add_db_users/lambda_function.zip
       Runtime: python3.7
-      Timeout: '60'
+      Timeout: '130'
       Layers:
         - !Ref AWSSBRequestsLambdaLayer
       VpcConfig:
@@ -1485,25 +1502,18 @@ Resources:
 ###############################################################################
 Outputs:
   ClusterEndpoint:
-    Description: 'Aurora Cluster/Writer Endpoint'
-    Value: !GetAtt 'AuroraDBCluster.Endpoint.Address'
+    Description: Aurora Cluster/Writer Endpoint
+    Value: !GetAtt AuroraDBCluster.Endpoint.Address
   ReaderEndpoint:
     Condition: ServerlessDisabled
-    Description: 'Aurora Reader Endpoint'
-    Value: !GetAtt 'AuroraDBCluster.ReadEndpoint.Address'
+    Description: Aurora Reader Endpoint
+    Value: !GetAtt AuroraDBCluster.ReadEndpoint.Address
   Port:
-    Description: 'Aurora Endpoint Port'
-    Value: !GetAtt 'AuroraDBCluster.Endpoint.Port'
+    Description: Aurora Endpoint Port
+    Value: !GetAtt AuroraDBCluster.Endpoint.Port
   DBUsername:
-    Description: 'Database master username'
+    Description: Database master username
     Value: !Ref DBUsername
-# TODO: This needs to go.
-  DBPassword:
-   Value:
-      !If
-      - AutoPassword
-      - !GetAtt AWSSBInjectedGeneratePassword.MasterUserPassword
-      - !Ref DBPassword
   DBName:
     Value:
       !If
@@ -1516,4 +1526,3 @@ Outputs:
       - IamEnabled
       - !GetAtt AWSSBInjectedAddDbUsers.User
       - ''
-
