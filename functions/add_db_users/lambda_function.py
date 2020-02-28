@@ -43,6 +43,11 @@ def user_exists(cursor, username):
     return True
 
 
+# Make a nice list of federated users with access to the DB User.
+def formatIamUsers(account, ldap_users):
+    return ["arn:aws:sts::{}:federated-user/{}".format(account, ldap_user) for ldap_user in ldap_users.split(',')]
+
+
 def wait_domain_name(hostname):
     period = 30
     attempts = 4
@@ -71,6 +76,10 @@ def handler(event, context):
                 event['ResourceProperties']['DBPassword'],
                 event['ResourceProperties']['ClusterEndpoint'],
                 event['ResourceProperties']['DBName']
+            )
+            response_data['IamUsers'] = formatIamUsers(
+                event['ResourceProperties']['Account'],
+                event['ResourceProperties']['LdapUsers']
             )
         cfnresponse.send(event, context, response_code, response_data, phys_id)
     except Exception as e:

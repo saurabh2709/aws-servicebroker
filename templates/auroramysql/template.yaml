@@ -28,7 +28,7 @@ Metadata:
       - OwnerTag
       - CostCenterTag
       - DataClassificationTag
-      - IamUsers
+      - LdapUsers
       - PCIDataTag
       - PreferredMaintenanceWindowDay
       - PreferredMaintenanceWindowStartTime
@@ -36,6 +36,7 @@ Metadata:
       - AccessCidr
       - InboundSGName
       - AutoMinorVersionUpgrade
+      - FederatedRole
     ServicePlans:
       sign-production:
         DisplayName: Sign Production
@@ -105,7 +106,12 @@ Metadata:
           - AccessCidr
           - InboundSGName
           - SubnetName
-          - IamUsers
+      -
+        Label:
+          default: Database User Access
+        Parameters:
+          - LdapUsers
+          - FederatedRole
       -
         Label:
           default: Database Instance Specification
@@ -225,8 +231,10 @@ Metadata:
         default: Cloud Resource Tagging Standard Data Classification Tag
       PCIDataTag:
         default: Cloud Resource Tagging Standard PCI Data Tag
-      IamUsers:
+      LdapUsers:
         default: LDAP usernames with write access
+      FederatedRole:
+        default: IAM role for federated access.
 
 ###############################################################################
 # Parameters
@@ -389,8 +397,13 @@ Parameters:
     Description: Cloud Resource Tagging Standard EnvironmentTag
     Type: String
 
-  IamUsers:
+  LdapUsers:
     Description: Comma delimited LDAP usernames with write access
+    Type: String
+    Default: ''
+
+  FederatedRole:
+    Description: IAM role for federated access to AWS account. The managed policy allowing DB access will be added to this role.
     Type: String
     Default: ''
 
@@ -836,7 +849,7 @@ Conditions:
   IamEnabled:
     !Not
      - !Equals
-       - !Ref IamUsers
+       - !Ref LdapUsers
        - ''
 
   SGIngress:
@@ -880,6 +893,8 @@ Resources:
       ManagedPolicyName: !Join [ "-", [ DB_User, !Ref ArchPathTag, !Ref DBName ] ]
       Description: Managed Policy for access to service broker created Aurora MySQL database
       Path: /
+      Roles:
+        - !Ref FederatedRole
       PolicyDocument:
           Version: 2012-10-17
           Statement:
@@ -888,6 +903,9 @@ Resources:
               - rds-db:connect
             Resource:
               - !GetAtt AWSSBInjectedAddDbUsers.User
+            Condition:
+              StringLike:
+                aws:userid: !GetAtt AWSSBInjectedAddDbUsers.IamUsers
 
   DBSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
@@ -904,6 +922,7 @@ Resources:
           FromPort: !Ref DBPort
           ToPort: !Ref DBPort
           SourceSecurityGroupId: !Ref LambdaSecurityGroup
+          Description: Lambda SG
       SecurityGroupEgress:
         - IpProtocol: tcp
           FromPort: 443
@@ -942,7 +961,7 @@ Resources:
       FromPort: !Ref DBPort
       ToPort: !Ref DBPort
       SourceSecurityGroupId: !GetAtt AWSSBInjectedGetSG.SecurityGroupId
-      Description: Ingress from named security group
+      Description: Named SG
 
   ClusterCidrIngress:
     Type: AWS::EC2::SecurityGroupIngress
@@ -953,7 +972,7 @@ Resources:
       FromPort: !Ref DBPort
       ToPort: !Ref DBPort
       CidrIp: !Ref AccessCidr
-      Description: Ingress from VPC CIDR
+      Description: VPC CIDR
 
   ClusterSecurityGroupLambdaEgress:
     Type: AWS::EC2::SecurityGroupEgress
@@ -1435,6 +1454,8 @@ Resources:
         - !GetAtt AWSSBInjectedGenerateDBName.DBName
         - !Ref DBName
       ClusterEndpoint: !GetAtt AuroraDBCluster.Endpoint.Address
+      Account: !Ref AWS::AccountId
+      LdapUsers: !Ref LdapUsers
   AWSSBInjectedGeneratePasswordRole:
     Condition: IamEnabled
     Type: AWS::IAM::Role
