@@ -12,7 +12,6 @@ ec2_client = boto3.client('ec2')
 def get_sg(sg_name):
     # Glob wildcards may be used.
     security_groups = ec2_client.describe_security_groups(Filters=[{'Name':'tag:Name', 'Values': [sg_name]}])
-    # TODO: Handle return of multiple SGs
     return [sg['GroupId'] for sg in security_groups['SecurityGroups']][0]
 
 def handler(event, context):
@@ -25,9 +24,9 @@ def handler(event, context):
         phys_id = event['PhysicalResourceId']
     try:
         if event['RequestType'] in ['Create', 'Update']:
-            response_data['SecurityGroupId'] = get_sg(
-                event['ResourceProperties']['SGName']
-            )
+            for i,sg in enumerate(event['ResourceProperties']['SGName'].split(',')):
+                key = 'SecurityGroupId{}'.format(i)
+                response_data[key] = get_sg(sg)
         cfnresponse.send(event, context, response_code, response_data, phys_id)
     except Exception as e:
         print(str(e))

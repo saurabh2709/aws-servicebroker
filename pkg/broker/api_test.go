@@ -6,7 +6,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/cloudformation"
 	"github.com/aws/aws-sdk-go/service/ssm/ssmiface"
-	"github.com/awslabs/aws-servicebroker/pkg/serviceinstance"
+	"github.com/adobe-platform/aws-servicebroker/pkg/serviceinstance"
 	osb "github.com/pmorie/go-open-service-broker-client/v2"
 	"github.com/pmorie/osb-broker-lib/pkg/broker"
 	"github.com/stretchr/testify/assert"

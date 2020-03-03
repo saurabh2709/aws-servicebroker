@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
   Creates the prerequisites for the AWS Service Broker -
-  https://github.com/awslabs/aws-servicebroker/blob/master/docs/install_prereqs.md
+  https://github.com/adobe-platform/aws-servicebroker/blob/master/docs/install_prereqs.md
 Resources:
   BrokerTable:
     Type: "AWS::DynamoDB::Table"

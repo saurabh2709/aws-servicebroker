@@ -11,8 +11,12 @@ type ServiceInstance struct {
 	StackID   string
 }
 
+// Do not compare StackID, as that is not passed in the service instance parameters.
 func (i *ServiceInstance) Match(other *ServiceInstance) bool {
-	return reflect.DeepEqual(i, other)
+	return i.ID == other.ID &&
+		i.ServiceID == other.ServiceID &&
+		i.PlanID == other.PlanID &&
+		reflect.DeepEqual(i.Params, other.Params)
 }
 
 // ServiceBinding represents a service binding.
