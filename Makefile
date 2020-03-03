@@ -1,4 +1,4 @@
-IMAGE ?= my-docker-org/aws-servicebroker
+IMAGE ?= docker-dc-micro-release.dr.corp.adobe.com/staging/aws-servicebroker
 TAG  ?= latest
 BUCKET_NAME ?= my-helm-repo-bucket
 BUCKET_PREFIX ?= /charts
@@ -46,6 +46,9 @@ cf: ## Builds a PCF tile and bosh release
 
 image: ## Builds docker image
 	docker build . -t $(IMAGE):$(TAG)
+
+push-image: image
+	docker push $(IMAGE):$(TAG)
 
 clean: ## Cleans up build artifacts
 	rm -f servicebroker
