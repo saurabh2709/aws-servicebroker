@@ -96,13 +96,13 @@ functions: ## Package and upload functions
 	mkdir -p release/$(VERSION)$(FUNCTION_PREFIX)/ && \
 	cp -a functions functions-staging && \
 	cd functions-staging && \
-	for i in $(FUNCTIONS) ; do mkdir -p ../release/$(VERSION)$(FUNCTION_PREFIX)/$$i ; cd $$i ; pip install -r requirements.txt --target . ; zip -r lambda_function * -x .* -x '*bin/*' ; cp lambda_function.zip ../../release/$(VERSION)$(FUNCTION_PREFIX)/$$i ; cd .. ; done && \
+	for i in $(FUNCTIONS) ; do mkdir -p ../release/$(VERSION)$(FUNCTION_PREFIX)/$$i ; cd $$i ; pip3 install -r requirements.txt --target . ; zip -r lambda_function * -x .* -x '*bin/*' ; cp lambda_function.zip ../../release/$(VERSION)$(FUNCTION_PREFIX)/$$i ; cd .. ; done && \
 	cd .. && \
 	aws s3 cp --recursive release/$(VERSION)$(FUNCTION_PREFIX)/ s3://$(BUCKET_NAME)$(FUNCTION_PREFIX)/ --acl $(ACL) $(PROFILE) && \
 	rm -rf functions-staging && \
 	cp -a layers layers-staging && \
 	cd layers-staging && \
-	for i in $(LAYERS) ; do mkdir -p ../release/$(VERSION)$(LAYER_PREFIX)/$$i ; cd $$i/python ; pip install -r requirements.txt --target . ; cd .. ; zip -r lambda_layer * -x .* -x 'python/bin/*' -x python/botocore* ; cp lambda_layer.zip ../../release/$(VERSION)$(LAYER_PREFIX)/$$i ; cd .. ; done && \
+	for i in $(LAYERS) ; do mkdir -p ../release/$(VERSION)$(LAYER_PREFIX)/$$i ; cd $$i/python ; pip3 install -r requirements.txt --target . ; cd .. ; zip -r lambda_layer * -x .* -x 'python/bin/*' -x python/botocore* ; cp lambda_layer.zip ../../release/$(VERSION)$(LAYER_PREFIX)/$$i ; cd .. ; done && \
 	cd .. && \
 	aws s3 cp --recursive release/$(VERSION)$(LAYER_PREFIX)/ s3://$(BUCKET_NAME)$(LAYER_PREFIX)/ --acl $(ACL) $(PROFILE) && \
 	rm -rf layers-staging
