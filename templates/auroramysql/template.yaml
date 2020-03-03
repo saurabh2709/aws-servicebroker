@@ -37,6 +37,7 @@ Metadata:
       - InboundSGName
       - AutoMinorVersionUpgrade
       - FederatedRole
+      - ServiceRole
     ServicePlans:
       sign-production:
         DisplayName: Sign Production
@@ -55,7 +56,7 @@ Metadata:
           AutoMinorVersionUpgrade: 'true'
           DBUsername: master
           DBPassword: Auto
-          InboundSGName: '*-sgs-private*'
+          InboundSGName: '*-sgs-private,*-sgs-bastion'
           SubnetName: '*-support-*'
           VpcName: "*micro*"
           CostCenterTag: 102449
@@ -79,7 +80,7 @@ Metadata:
           PreferredMaintenanceWindowDay: Sat
           PreferredMaintenanceWindowStartTime: 06:00
           PreferredMaintenanceWindowEndTime: 07:00
-          InboundSGName: '*-sgs-private*'
+          InboundSGName: '*-sgs-private,*-sgs-bastion'
           SubnetName: '*-support-*'
           VpcName: "*micro*"
           CostCenterTag: 102449
@@ -112,6 +113,7 @@ Metadata:
         Parameters:
           - LdapUsers
           - FederatedRole
+          - ServiceRole
       -
         Label:
           default: Database Instance Specification
@@ -142,6 +144,7 @@ Metadata:
           - StorageEncrypted
           - DeletionProtection
           - RDSTimeZone
+          - DBClusterIdentifier
       -
         Label:
           default: Severless Specification (only applicable if Engine Version is 'MySQL 5.6-compatible' and Engine Mode is 'Serverless')
@@ -185,6 +188,8 @@ Metadata:
         default: Publicly Accessible
       AccessCidr:
         default: Access CIDR
+      DBClusterIdentifier:
+        default: Name of DB Cluster
       NumberofAuroraReplicas:
         default: Number of Aurora Replicas
       DeletionProtection:
@@ -235,6 +240,8 @@ Metadata:
         default: LDAP usernames with write access
       FederatedRole:
         default: IAM role for federated access.
+      ServiceRole:
+        default: IAM role of the accessing service.
 
 ###############################################################################
 # Parameters
@@ -264,6 +271,10 @@ Parameters:
       wildcards allowed. (Optional)
     Type: String
     Default: None
+
+  DBClusterIdentifier:
+    Description: Name of the DB Cluster
+    Type: String
 
   AutoMinorVersionUpgrade:
     Description: Indicates that minor engine upgrades are applied automatically to
@@ -404,6 +415,11 @@ Parameters:
 
   FederatedRole:
     Description: IAM role for federated access to AWS account. The managed policy allowing DB access will be added to this role.
+    Type: String
+    Default: ''
+
+  ServiceRole:
+    Description: IAM role for the service to access the database. The managed policy allowing DB access will be added to this role.
     Type: String
     Default: ''
 
@@ -889,12 +905,14 @@ Resources:
 
   DBUserPolicy:
     Type: AWS::IAM::ManagedPolicy
+    Condition: IamEnabled
     Properties:
-      ManagedPolicyName: !Join [ "-", [ DB_User, !Ref ArchPathTag, !Ref DBName ] ]
+      ManagedPolicyName: !Join [ "-", [ DB_User, !Ref ArchPathTag, !Ref AuroraDBPrimaryInstance ] ]
       Description: Managed Policy for access to service broker created Aurora MySQL database
       Path: /
       Roles:
         - !Ref FederatedRole
+        - !Ref ServiceRole
       PolicyDocument:
           Version: 2012-10-17
           Statement:
@@ -952,7 +970,7 @@ Resources:
       SourceSecurityGroupId: !GetAtt ClusterSecurityGroup.GroupId
       Description: Self Reference
 
-  ClusterSecurityGroupIngress:
+  ClusterSecurityGroupIngress1:
     Type: AWS::EC2::SecurityGroupIngress
     Condition: SGIngress
     Properties:
@@ -960,7 +978,18 @@ Resources:
       IpProtocol: tcp
       FromPort: !Ref DBPort
       ToPort: !Ref DBPort
-      SourceSecurityGroupId: !GetAtt AWSSBInjectedGetSG.SecurityGroupId
+      SourceSecurityGroupId: !GetAtt AWSSBInjectedGetSG.SecurityGroupId0
+      Description: Named SG
+
+  ClusterSecurityGroupIngress2:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: SGIngress
+    Properties:
+      GroupId: !GetAtt ClusterSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: !Ref DBPort
+      ToPort: !Ref DBPort
+      SourceSecurityGroupId: !GetAtt AWSSBInjectedGetSG.SecurityGroupId1
       Description: Named SG
 
   ClusterCidrIngress:
@@ -1034,6 +1063,7 @@ Resources:
     DeletionPolicy: Snapshot
     UpdateReplacePolicy: Snapshot
     Properties:
+      DBClusterIdentifier: !Ref DBClusterIdentifier
       Engine:  !FindInMap [DBEngineNameMap, !Ref DBEngineVersion, enginename]
       EngineVersion: !FindInMap [DBEngineVersionMap, !Ref DBEngineVersion, engineversion]
       EngineMode: !Ref DBEngineMode

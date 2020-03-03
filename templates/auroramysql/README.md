@@ -29,7 +29,11 @@ Pricing: https://aws.amazon.com/rds/aurora/pricing/
 
 ### Required
 
-No parameters must be declared when provisioning an instance of this service
+At a minimum these parameters must be declared when provisioning an instance of this service
+
+Name           | Description     | Accepted Values
+-------------- | --------------- | ---------------
+DBClusterIdentifier|The name of the database cluster.|string
 
 ### Optional
 
@@ -46,6 +50,7 @@ PreferredMaintenanceWindowStartTime|The weekly start time in UTC for the RDS mai
 PubliclyAccessible|Indicates whether the DB instance is an Internet-facing instance.|false|true, false
 LdapUsers|Comma delimited LDAP usernames with write access.|''|
 FederatedRole|IAM role for federated access to AWS account. The managed policy allowing DB access will be added to this role.|''|
+ServiceRole|IAM role for the service to access the database. The managed policy allowing DB access will be added to this role.|''|
 AccessCidr|CIDR block to allow to connect to database|None|
 
 ### Generic
@@ -88,7 +93,11 @@ Pricing: https://aws.amazon.com/rds/aurora/pricing/
 
 ### Required
 
-No parameters must be declared when provisioning an instance of this service
+At a minimum these parameters must be declared when provisioning an instance of this service
+
+Name           | Description     | Accepted Values
+-------------- | --------------- | ---------------
+DBClusterIdentifier|The name of the database cluster.|string
 
 ### Optional
 
@@ -162,6 +171,7 @@ DBUsername|Master database Username|string
 SubnetName|String to match against existing subnets to place the cache cluster in (glob wildcards allowed).|string
 InboundSGName|Existing Security Group name to allow access to database (glob wildcards allowed).|string
 VpcName|The name of the VPC to launch the Memcache cluster into.|string
+DBClusterIdentifier|The name of the database cluster.|string
 
 ### Optional
 
@@ -197,6 +207,8 @@ ServerlessAutoPause|Specifies whether to allow or disallow automatic pause for a
 ServerlessSecondsUntilAutoPause|The time, in seconds, before an Aurora DB cluster in serverless mode is auto paused. Min = 300, Max = 86400 (24hrs)|300|300
 SubnetName|String to match against existing subnets to place the cache cluster in (glob wildcards allowed).|\*-support-\*
 InboundSGName|Existing Security Group name to allow access to database (glob wildcards allowed).|\*-sgs-private-\*
+FederatedRole|IAM role for federated access to AWS account. The managed policy allowing DB access will be added to this role.|''|
+ServiceRole|IAM role for the service to access the database. The managed policy allowing DB access will be added to this role.|''|
 VpcName|The name of the VPC to launch the Memcache cluster into.|\*micro\*
 
 
@@ -219,9 +231,10 @@ These are the environment variables that are available to an application on bind
 
 Name           | Description
 -------------- | ---------------
-ENDPOINT_ADDRESS|
-MASTER_USERNAME|
-MASTER_PASSWORD|
+CLUSTER_ENDPOINT|
+READER_ENDPOINT|
+DB_USERNAME|
+DBIAM_USER|
 PORT|
 DB_NAME|
 

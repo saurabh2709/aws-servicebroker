@@ -18,6 +18,13 @@ Metadata:
     ImageUrl: https://s3.amazonaws.com/awsservicebroker/icons/Database_AmazonElasticCache_LARGE.png
     DocumentationUrl: https://aws.amazon.com/documentation/elasticache/
     ProviderDisplayName: Amazon Web Services
+    UpdatableParameters:
+      - ArchPathTag
+      - EnvironmentTag
+      - OwnerTag
+      - CostCenterTag
+      - DataClassificationTag
+      - PCIDataTag
     ServicePlans:
       sign-production:
         DisplayName: Sign Production
@@ -62,6 +69,15 @@ Metadata:
       Parameters:
       - PreferredMaintenanceWindowStartTime
       - PreferredMaintenanceWindowEndTime
+    - Label:
+        default: Adobe Tags
+      Parameters:
+        - ArchPathTag
+        - EnvironmentTag
+        - OwnerTag
+        - CostCenterTag
+        - DataClassificationTag
+        - PCIDataTag
     ParameterLabels:
       ClusterType:
         default: Cluster Type
@@ -87,6 +103,18 @@ Metadata:
         default: Preferred MaintenanceWindow Start Time
       PreferredMaintenanceWindowEndTime:
         default: Preferred Maintenance Window End Time
+      ArchPathTag:
+        default: Cloud Resource Tagging Standard ArchPath
+      EnvironmentTag:
+        default: Cloud Resource Tagging Standard EnvironmentTag
+      OwnerTag:
+        default: Cloud Resource Tagging Standard Owner
+      CostCenterTag:
+        default: Cloud Resource Tagging Standard Cost Center
+      DataClassificationTag:
+        default: Cloud Resource Tagging Standard Data Classification Tag
+      PCIDataTag:
+        default: Cloud Resource Tagging Standard PCI Data Tag
 Parameters:
   VpcName:
     Description: The name of the VPC to launch the Memcache cluster into
@@ -239,6 +267,24 @@ Parameters:
     AllowedValues:
     - single-az
     - cross-az
+  ArchPathTag:
+    Description: Cloud Resource Tagging Standard ArchPath
+    Type: String
+  CostCenterTag:
+    Description: Cloud Resource Tagging Standard Cost Center
+    Type: String
+  DataClassificationTag:
+    Description: Cloud Resource Tagging Standard Data Classification Tag
+    Type: String
+  EnvironmentTag:
+    Description: Cloud Resource Tagging Standard EnvironmentTag
+    Type: String
+  OwnerTag:
+    Description: Cloud Resource Tagging Standard Owner
+    Type: String
+  PCIDataTag:
+    Description: Cloud Resource Tagging Standard PCI Data Tag
+    Type: String
 Conditions:
   Cross-AZ:
     !Equals
@@ -266,6 +312,19 @@ Resources:
       CacheParameterGroupFamily: memcached1.4
       Description: AWS Service Broker Elasticache cluster
       Properties: {}
+      Tags:
+        - Key: Adobe.ArchPath
+          Value: !Ref ArchPathTag
+        - Key: Adobe.Environment
+          Value: !Ref EnvironmentTag
+        - Key: Adobe.Owner
+          Value: !Ref OwnerTag
+        - Key: Adobe.CostCenter
+          Value: !Ref CostCenterTag
+        - Key: Adobe.DataClassification
+          Value: !Ref DataClassificationTag
+        - Key: Adobe.PCIData
+          Value: !Ref PCIDataTag
   ClusterSubnetGroup:
     Type: AWS::ElastiCache::SubnetGroup
     Properties:
@@ -280,7 +339,7 @@ Resources:
       - IpProtocol: tcp
         FromPort: !Ref PortNumber
         ToPort: !Ref PortNumber
-        SourceSecurityGroupId: !GetAtt AWSSBInjectedGetSG.SecurityGroupId
+        SourceSecurityGroupId: !GetAtt AWSSBInjectedGetSG.SecurityGroupId0
       SecurityGroupEgress:
       - IpProtocol: '-1'
         FromPort: '-1'
