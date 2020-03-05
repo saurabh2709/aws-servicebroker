@@ -11,25 +11,34 @@ alnum = string.ascii_uppercase + string.ascii_lowercase + string.digits
 client = boto3.client('ec2')
 
 
-def add_db_user(admin_user, admin_password, endpoint, cluster_id):
+def add_db_user(master_user, master_password, endpoint, cluster_id):
+    # Required for User ARN.
+    region = client.meta.region_name
+    account = boto3.client('sts').get_caller_identity().get('Account')
+
     # wait for domain name to propagate
     wait_domain_name(endpoint)
     print("endpoint: {}, id: {}".format(endpoint, cluster_id))
-    username = 'dev'
-    rdsdb = mysql.connector.connect(host=endpoint, user=admin_user, password=admin_password)
+    # master user does not have super privileges, cannot grant 'ALL PRIVILEGES ON *.*'.
+    users = {'admin': 'GRANT ALL ON `%`.*', 'application': 'GRANT SELECT, INSERT, UPDATE, DELETE ON `%`.*'}
+    rdsdb = mysql.connector.connect(host=endpoint, user=master_user, password=master_password)
     cursor = rdsdb.cursor(buffered=True)
-    if not user_exists(cursor, username):
-        statement = """CREATE USER {} IDENTIFIED WITH AWSAuthenticationPlugin AS 'RDS';""".format(username)
-        print(statement)
-        cursor.execute(statement)
+    rds_users = {}
+    for username, grant in users.items():
         if not user_exists(cursor, username):
-            raise Exception("Unable to create User '{}'.".format(username))
+            statement = """CREATE USER {} IDENTIFIED WITH AWSAuthenticationPlugin AS 'RDS';""".format(username)
+            print(statement)
+            cursor.execute(statement)
+            if not user_exists(cursor, username):
+                raise Exception("Unable to create User '{}'.".format(username))
+            grant_statement = """{} TO {}""".format(grant, username)
+            print(grant_statement)
+            cursor.execute(grant_statement)
 
-    # Construct user arn.
-    region = client.meta.region_name
-    account = boto3.client('sts').get_caller_identity().get('Account')
+        rds_users[username] = "arn:aws:rds-db:{}:{}:dbuser:{}/{}".format(region, account, cluster_id, username)
+
     rdsdb.close()
-    return "arn:aws:rds-db:{}:{}:dbuser:{}/{}".format(region, account, cluster_id, username)
+    return rds_users
 
 
 def user_exists(cursor, username):
@@ -71,12 +80,14 @@ def handler(event, context):
         phys_id = event['PhysicalResourceId']
     try:
         if event['RequestType'] in ['Create', 'Update']:
-            response_data['User'] = add_db_user(
+            rds_users = add_db_user(
                 event['ResourceProperties']['DBUsername'],
                 event['ResourceProperties']['DBPassword'],
                 event['ResourceProperties']['ClusterEndpoint'],
                 event['ResourceProperties']['DBName']
             )
+            response_data['ApplicationUser'] = rds_users['application']
+            response_data['AdminUser'] = rds_users['admin']
             response_data['IamUsers'] = formatIamUsers(
                 event['ResourceProperties']['Account'],
                 event['ResourceProperties']['LdapUsers']
