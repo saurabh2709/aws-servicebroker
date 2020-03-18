@@ -20,7 +20,7 @@ def add_db_user(master_user, master_password, endpoint, cluster_id):
     wait_domain_name(endpoint)
     print("endpoint: {}, id: {}".format(endpoint, cluster_id))
     # master user does not have super privileges, cannot grant 'ALL PRIVILEGES ON *.*'.
-    users = {'admin': 'GRANT ALL ON `%`.*', 'application': 'GRANT SELECT, INSERT, UPDATE, DELETE ON `%`.*'}
+    users = {'admin': 'GRANT ALL ON `%`.*', 'application': 'GRANT SELECT, INSERT, UPDATE, DELETE ON `%`.* REQUIRE SSL'}
     rdsdb = mysql.connector.connect(host=endpoint, user=master_user, password=master_password)
     cursor = rdsdb.cursor(buffered=True)
     rds_users = {}
