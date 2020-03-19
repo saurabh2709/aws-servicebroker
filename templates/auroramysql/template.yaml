@@ -28,7 +28,8 @@ Metadata:
       - OwnerTag
       - CostCenterTag
       - DataClassificationTag
-      - LdapUsers
+      - AdminUsers
+      - ReadUsers
       - PCIDataTag
       - PreferredMaintenanceWindowDay
       - PreferredMaintenanceWindowStartTime
@@ -39,14 +40,13 @@ Metadata:
       - FederatedRole
       - ServiceRole
     ServicePlans:
-      sign-production:
-        DisplayName: Sign Production
+      production:
+        DisplayName: Production
         Description: Configuration designed for production deployments
         LongDescription: Creates an Amazon Aurora MySQL database optimised for
           production use
         Cost: https://aws.amazon.com/rds/aurora/pricing/
         ParameterValues:
-          # Should this be set here?
           NumberofAuroraReplicas: '2'
           DBPort: 3306
           StorageEncrypted: 'true'
@@ -55,12 +55,8 @@ Metadata:
           AutoMinorVersionUpgrade: 'true'
           DBUsername: master
           DBPassword: Auto
-          InboundSGName: '*-sgs-private,*-sgs-bastion'
-          SubnetName: '*-support-*'
-          VpcName: "*micro*"
-          CostCenterTag: 102449
-      sign-dev:
-        DisplayName: Sign Development
+      dev:
+        DisplayName: Development
         Description: Configuration designed for development and testing deployments
         LongDescription: Creates an Amazon Aurora MySQL database optimised for
           dev/test use
@@ -78,10 +74,6 @@ Metadata:
           PreferredMaintenanceWindowDay: Sat
           PreferredMaintenanceWindowStartTime: 06:00
           PreferredMaintenanceWindowEndTime: 07:00
-          InboundSGName: '*-sgs-private,*-sgs-bastion'
-          SubnetName: '*-support-*'
-          VpcName: "*micro*"
-          CostCenterTag: 102449
       custom:
         DisplayName: Custom
         Description: Custom Configuration for Advanced deployments
@@ -109,7 +101,8 @@ Metadata:
         Label:
           default: Database User Access
         Parameters:
-          - LdapUsers
+          - AdminUsers
+          - ReadUsers
           - FederatedRole
           - ServiceRole
       -
@@ -122,6 +115,8 @@ Metadata:
           default: Database Replication
         Parameters:
           - NumberofAuroraReplicas
+          - GlobalClusterIdentifier
+          - GlobalPrimaryRegion
       -
         Label:
           default: Database Specification
@@ -188,6 +183,10 @@ Metadata:
         default: Access CIDR
       DBClusterIdentifier:
         default: Name of DB Cluster
+      GlobalClusterIdentifier:
+        default: Global Cluster Identifier
+      GlobalPrimaryRegion:
+        default: Primary Region for Global Cluster
       NumberofAuroraReplicas:
         default: Number of Aurora Replicas
       DeletionProtection:
@@ -234,8 +233,10 @@ Metadata:
         default: Cloud Resource Tagging Standard Data Classification Tag
       PCIDataTag:
         default: Cloud Resource Tagging Standard PCI Data Tag
-      LdapUsers:
-        default: LDAP usernames with write access
+      AdminUsers:
+        default: LDAP usernames with admin access
+      ReadUsers:
+        default: LDAP usernames with read access
       FederatedRole:
         default: IAM role for federated access.
       ServiceRole:
@@ -406,8 +407,13 @@ Parameters:
     Description: Cloud Resource Tagging Standard EnvironmentTag
     Type: String
 
-  LdapUsers:
-    Description: Comma delimited LDAP usernames with write access
+  AdminUsers:
+    Description: Comma delimited LDAP usernames with admin access
+    Type: String
+    Default: ''
+
+  ReadUsers:
+    Description: Comma delimited LDAP usernames with read access
     Type: String
     Default: ''
 
@@ -429,6 +435,16 @@ Parameters:
     - '0'
     - '1'
     - '2'
+
+  GlobalClusterIdentifier:
+    Description: Global Cluster Identifier
+    Type: String
+    Default: ''
+
+  GlobalPrimaryRegion:
+    Description: Primary region for global cluster.
+    Type: String
+    Default: ''
 
   MonitoringInterval:
     Description: The interval, in seconds, between points when Enhanced Monitoring
@@ -860,11 +876,30 @@ Conditions:
     - !Ref DBName
     - Auto
 
+  AdminIam:
+    !Not
+    - !Equals
+      - AdminUsers
+      - ''
+
+  ReadIam:
+    !Not
+    - !Equals
+      - ReadUsers
+      - ''
+
+  IamNotEnabled:
+    !And
+     - !Equals
+       - !Ref AdminUsers
+       - ''
+     - !Equals
+       - !Ref ReadUsers
+       - ''
+
   IamEnabled:
     !Not
-     - !Equals
-       - !Ref LdapUsers
-       - ''
+     - !Condition IamNotEnabled
 
   SGIngress:
     !Not
@@ -877,6 +912,35 @@ Conditions:
      - !Equals
        - !Ref AccessCidr
        - None
+
+  GlobalCluster:
+    !And
+      - !Not
+        - !Equals
+          - !Ref GlobalClusterIdentifier
+          - ''
+      - !Not
+        - !Equals
+          - !Ref GlobalPrimaryRegion
+          - ''
+
+  IsPrimaryRegion:
+    !And
+      - !Condition GlobalCluster
+      - !Equals
+        - !Ref GlobalPrimaryRegion
+        - !Ref AWS::Region
+
+  IsSecondaryRegion:
+    !And
+      - !Condition GlobalCluster
+      - !Not
+        - !Condition IsPrimaryRegion
+
+  CreatePrimaryDBCluster:
+    !Or
+    - !Condition IsPrimaryRegion
+    - !Not [!Condition GlobalCluster]
 
 ###############################################################################
 # Resources
@@ -901,12 +965,12 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole
 
-  DBUserPolicy:
+  DBAdminUserPolicy:
     Type: AWS::IAM::ManagedPolicy
     Condition: IamEnabled
     Properties:
       ManagedPolicyName: !Join [ "-", [ Admin_User, !Ref ArchPathTag, !Ref AuroraDBPrimaryInstance ] ]
-      Description: Managed Policy for access to service broker created Aurora MySQL database
+      Description: Managed Policy for admin access to service broker created Aurora MySQL database
       Path: /
       Roles:
         - !Ref FederatedRole
@@ -920,7 +984,28 @@ Resources:
               - !GetAtt AWSSBInjectedAddDbUsers.AdminUser
             Condition:
               StringLike:
-                aws:userid: !GetAtt AWSSBInjectedAddDbUsers.IamUsers
+                aws:userid: !GetAtt AWSSBInjectedAddDbUsers.AdminUsers
+
+  DBReadUserPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Condition: IamEnabled
+    Properties:
+      ManagedPolicyName: !Join [ "-", [ Read_User, !Ref ArchPathTag, !Ref AuroraDBPrimaryInstance ] ]
+      Description: Managed Policy for read access to service broker created Aurora MySQL database
+      Path: /
+      Roles:
+        - !Ref FederatedRole
+      PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Action:
+              - rds-db:connect
+            Resource:
+              - !GetAtt AWSSBInjectedAddDbUsers.ReadUser
+            Condition:
+              StringLike:
+                aws:userid: !GetAtt AWSSBInjectedAddDbUsers.ReadUsers
 
   DBApplicationPolicy:
     Type: AWS::IAM::ManagedPolicy
@@ -1035,11 +1120,14 @@ Resources:
       Family: !FindInMap [DBFamilyMap, !Ref DBEngineVersion, "family"]
       Parameters:
         time_zone: !Ref RDSTimeZone
+        binlog_format: ROW
+        master-info-repository: TABLE
 
   AuroraKMSCMK:
     Type: AWS::KMS::Key
     DeletionPolicy: Retain
     Properties:
+      EnableKeyRotation: True
       KeyPolicy:
         Version: '2012-10-17'
         Statement:
@@ -1090,18 +1178,25 @@ Resources:
           MinCapacity: !Ref ServerlessMinCapacityUnit
           SecondsUntilAutoPause: !Ref ServerlessSecondsUntilAutoPause
         - !Ref AWS::NoValue
-      DatabaseName:
-        !If
-        - AutoDBName
-        - !GetAtt AWSSBInjectedGenerateDBName.DBName
-        - !Ref DBName
+      DatabaseName: !If
+        - CreatePrimaryDBCluster
+        - !If
+          - AutoDBName
+          - !GetAtt AWSSBInjectedGenerateDBName.DBName
+          - !Ref DBName
+        - !Ref AWS::NoValue
       Port: !Ref DBPort
-      MasterUsername: !Ref DBUsername
-      MasterUserPassword:
-        !If
-        - AutoPassword
-        - !GetAtt AWSSBInjectedGeneratePassword.MasterUserPassword
-        - !Ref DBPassword
+      MasterUsername: !If
+        - CreatePrimaryDBCluster
+        - !Ref DBUsername
+        - !Ref AWS::NoValue
+      MasterUserPassword: !If
+        - CreatePrimaryDBCluster
+        - !If
+          - AutoPassword
+          - !GetAtt AWSSBInjectedGeneratePassword.MasterUserPassword
+          - !Ref DBPassword
+        - !Ref AWS::NoValue
       DBSubnetGroupName: !Ref DBSubnetGroup
       VpcSecurityGroupIds:
       - !Ref ClusterSecurityGroup
@@ -1114,6 +1209,14 @@ Resources:
         - !Ref AWS::NoValue
       DeletionProtection: !Ref DeletionProtection
       PreferredMaintenanceWindow: !Sub ${PreferredMaintenanceWindowDay}:${PreferredMaintenanceWindowStartTime}-${PreferredMaintenanceWindowDay}:${PreferredMaintenanceWindowEndTime}
+      ReplicationSourceIdentifier: !If
+        - IsSecondaryRegion
+        - !GetAtt AWSSBInjectedGetGlobalCluster.SourceCluster
+        - !Ref AWS::NoValue
+      SourceRegion: !If
+        - IsSecondaryRegion
+        - !Ref GlobalPrimaryRegion
+        - !Ref AWS::NoValue
       Tags:
         - Key: Adobe.ArchPath
           Value: !Ref ArchPathTag
@@ -1246,6 +1349,7 @@ Resources:
       - functions/get_subnet_ids/lambda_function.zip
       - functions/get_sg/lambda_function.zip
       - functions/add_db_users/lambda_function.zip
+      - functions/create_global_cluster/lambda_function.zip
       - layers/requests/lambda_layer.zip
   AWSSBInjectedCopyZipsRole:
     Type: AWS::IAM::Role
@@ -1433,6 +1537,7 @@ Resources:
       ServiceToken: !GetAtt AWSSBInjectedGetSGLambda.Arn
       SGName: !Ref InboundSGName
   AWSSBInjectedAddDbUsersRole:
+    Condition: IamEnabled
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -1458,6 +1563,7 @@ Resources:
             - logs:CreateLogGroup
             - logs:CreateLogStream
             - logs:PutLogEvents
+            - rds:DescribeDBClusters
             Resource: '*'
   AWSSBInjectedAddDbUsersLambda:
     Condition: IamEnabled
@@ -1493,16 +1599,103 @@ Resources:
         - !GetAtt AWSSBInjectedGeneratePassword.MasterUserPassword
         - !Ref DBPassword
       DBUsername: !Ref DBUsername
-      DBName:
-        !If
-        - AutoDBName
-        - !GetAtt AWSSBInjectedGenerateDBName.DBName
-        - !Ref DBName
+      Cluster: !Ref AuroraDBCluster
       ClusterEndpoint: !GetAtt AuroraDBCluster.Endpoint.Address
       Account: !Ref AWS::AccountId
-      LdapUsers: !Ref LdapUsers
+      AdminUsers: !Ref AdminUsers
+      ReadUsers: !Ref ReadUsers
+      PrimaryRegion: !Ref GlobalPrimaryRegion
+  AWSSBInjectedCreateGlobalClusterRole:
+    Condition: GlobalCluster
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: /
+      Policies:
+      - PolicyName: cfn_utility_create_global_cluster
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - ec2:CreateNetworkInterface
+            - ec2:DescribeNetworkInterfaces
+            - ec2:DeleteNetworkInterface
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            - rds:CreateGlobalCluster
+            - rds:DescribeGlobalClusters
+            - rds:DescribeDBClusters
+            Resource: '*'
+  AWSSBInjectedCreateGlobalClusterLambda:
+    Condition: IsPrimaryRegion
+    DependsOn:
+      - AWSSBInjectedCopyZips
+      - AuroraDBPrimaryInstance
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: lambda_function.handler
+      Role:
+        Fn::GetAtt:
+        - AWSSBInjectedCreateGlobalClusterRole
+        - Arn
+      Code:
+        S3Bucket: !Ref AWSSBInjectedLambdaZipsBucket
+        S3Key: functions/create_global_cluster/lambda_function.zip
+      Runtime: python3.7
+      Timeout: '60'
+      Layers:
+        - !Ref AWSSBRequestsLambdaLayer
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds: !GetAtt AWSSBInjectedGetSubnetIds.SubnetIDs
+  AWSSBInjectedGetGlobalClusterLambda:
+    Condition: IsSecondaryRegion
+    DependsOn:
+      - AWSSBInjectedCopyZips
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: lambda_function.handler
+      Role:
+        Fn::GetAtt:
+        - AWSSBInjectedCreateGlobalClusterRole
+        - Arn
+      Code:
+        S3Bucket: !Ref AWSSBInjectedLambdaZipsBucket
+        S3Key: functions/create_global_cluster/lambda_function.zip
+      Runtime: python3.7
+      Timeout: '60'
+      Layers:
+        - !Ref AWSSBRequestsLambdaLayer
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds: !GetAtt AWSSBInjectedGetSubnetIds.SubnetIDs
+  AWSSBInjectedCreateGlobalCluster:
+    Condition: IsPrimaryRegion
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceToken: !GetAtt AWSSBInjectedCreateGlobalClusterLambda.Arn
+      GlobalClusterIdentifier: !Ref GlobalClusterIdentifier
+      DBClusterArn: !Join [ ":", [ "arn:aws:rds", !Ref "AWS::Region", !Ref "AWS::AccountId", "cluster", !Ref AuroraDBCluster ] ]
+  AWSSBInjectedGetGlobalCluster:
+    Condition: IsSecondaryRegion
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceToken: !GetAtt AWSSBInjectedGetGlobalClusterLambda.Arn
+      GlobalClusterIdentifier: !Ref GlobalClusterIdentifier
+      DBClusterArn: !Ref AWS::NoValue
   AWSSBInjectedGeneratePasswordRole:
-    Condition: IamEnabled
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -1622,6 +1815,13 @@ Outputs:
   DBUsername:
     Description: Database master username
     Value: !Ref DBUsername
+  DBPassword:
+    Condition: IamNotEnabled
+    Value:
+      !If
+      - AutoPassword
+      - !GetAtt AWSSBInjectedGeneratePassword.MasterUserPassword
+      - !Ref DBPassword
   DBName:
     Value:
       !If
@@ -1629,14 +1829,14 @@ Outputs:
       - !GetAtt AWSSBInjectedGenerateDBName.DBName
       - !Ref DBName
   AdminIamUser:
-    Value:
-      !If
-      - IamEnabled
-      - !GetAtt AWSSBInjectedAddDbUsers.AdminUser
-      - ''
+    Description: Admin User Arn
+    Condition: IamEnabled
+    Value: !GetAtt AWSSBInjectedAddDbUsers.AdminUser
   AppIamUser:
-    Value:
-      !If
-      - IamEnabled
-      - !GetAtt AWSSBInjectedAddDbUsers.ApplicationUser
-      - ''
+    Description: Application User Arn
+    Condition: AdminIam
+    Value: !GetAtt AWSSBInjectedAddDbUsers.ApplicationUser
+  ReadIamUser:
+    Description: Read User Arn
+    Condition: ReadIam
+    Value: !GetAtt AWSSBInjectedAddDbUsers.ReadUser
