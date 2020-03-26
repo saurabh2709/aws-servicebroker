@@ -20,7 +20,7 @@ def add_db_user(master_user, master_password, endpoint, db_region, cluster_id):
     users = {
             'admin': 'GRANT ALL ON `%`.* TO {} REQUIRE SSL',
             'application': 'GRANT SELECT, INSERT, UPDATE, DELETE ON `%`.* TO {} REQUIRE SSL',
-            'reader': 'GRANT SELECT, INSERT, UPDATE, DELETE ON `%`.* TO {} REQUIRE SSL',
+            'reader': 'GRANT SELECT ON `%`.* TO {} REQUIRE SSL',
             }
 
     if region != db_region:
