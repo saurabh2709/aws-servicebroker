@@ -64,11 +64,6 @@ def user_exists(cursor, username):
     return True
 
 
-# Make a nice list of federated users with access to the DB User.
-def format_iam_users(account, ldap_users):
-    return ["arn:aws:sts::{}:federated-user/{}".format(account, ldap_user) for ldap_user in ldap_users.split(',') if ldap_users]
-
-
 def get_cluster_resource_id(cluster):
     clusters = rds_client.describe_db_clusters(DBClusterIdentifier=cluster)
     return clusters['DBClusters'][0]['DbClusterResourceId']
@@ -108,14 +103,6 @@ def handler(event, context):
             response_data['ApplicationUser'] = rds_users['application']
             response_data['AdminUser'] = rds_users['admin']
             response_data['ReadUser'] = rds_users['reader']
-            response_data['AdminUsers'] = format_iam_users(
-                event['ResourceProperties']['Account'],
-                event['ResourceProperties']['AdminUsers']
-            )
-            response_data['ReadUsers'] = format_iam_users(
-                event['ResourceProperties']['Account'],
-                event['ResourceProperties']['ReadUsers']
-            )
         cfnresponse.send(event, context, response_code, response_data, phys_id)
     except Exception as e:
         print(str(e))
