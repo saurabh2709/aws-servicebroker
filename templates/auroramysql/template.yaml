@@ -6,7 +6,7 @@ Description: 'AWS Service Broker - Amazon Aurora MySQL 5.6, 5.7 (qs-1pn9kr5a8)'
 ###############################################################################
 Metadata:
   AWS::ServiceBroker::Specification:
-    Version: 1.0
+    Version: 1.1
     Tags:
     - AWS
     - Aurora
@@ -28,8 +28,6 @@ Metadata:
       - OwnerTag
       - CostCenterTag
       - DataClassificationTag
-      - AdminUsers
-      - ReadUsers
       - PCIDataTag
       - PreferredMaintenanceWindowDay
       - PreferredMaintenanceWindowStartTime
@@ -37,7 +35,9 @@ Metadata:
       - AccessCidr
       - InboundSGName
       - AutoMinorVersionUpgrade
-      - FederatedRole
+      - AdminRole
+      - ReadRole
+      - SchemaRole
       - ServiceRole
     ServicePlans:
       production:
@@ -101,9 +101,9 @@ Metadata:
         Label:
           default: Database User Access
         Parameters:
-          - AdminUsers
-          - ReadUsers
-          - FederatedRole
+          - AdminRole
+          - ReadRole
+          - SchemaRole
           - ServiceRole
       -
         Label:
@@ -233,14 +233,14 @@ Metadata:
         default: Cloud Resource Tagging Standard Data Classification Tag
       PCIDataTag:
         default: Cloud Resource Tagging Standard PCI Data Tag
-      AdminUsers:
-        default: LDAP usernames with admin access
-      ReadUsers:
-        default: LDAP usernames with read access
-      FederatedRole:
-        default: IAM role for federated access.
+      AdminRole:
+        default: IAM role for admin access
+      ReadRole:
+        default: IAM role for read access
+      SchemaRole:
+        default: IAM role for schema manipulation
       ServiceRole:
-        default: IAM role of the accessing service.
+        default: IAM role of the accessing service
 
 ###############################################################################
 # Parameters
@@ -407,23 +407,23 @@ Parameters:
     Description: Cloud Resource Tagging Standard EnvironmentTag
     Type: String
 
-  AdminUsers:
-    Description: Comma delimited LDAP usernames with admin access
+  AdminRole:
+    Description: IAM role for admin access
     Type: String
     Default: ''
 
-  ReadUsers:
-    Description: Comma delimited LDAP usernames with read access
+  ReadRole:
+    Description: IAM role for read access
     Type: String
     Default: ''
 
-  FederatedRole:
-    Description: IAM role for federated access to AWS account. The managed policy allowing DB access will be added to this role.
+  SchemaRole:
+    Description: IAM role for schema manipulation
     Type: String
     Default: ''
 
   ServiceRole:
-    Description: IAM role for the service to access the database. The managed policy allowing DB access will be added to this role.
+    Description: IAM role of the accessing service
     Type: String
     Default: ''
 
@@ -879,27 +879,29 @@ Conditions:
   AdminIam:
     !Not
     - !Equals
-      - AdminUsers
+      - AdminRole
       - ''
 
   ReadIam:
     !Not
     - !Equals
-      - ReadUsers
+      - ReadRole
       - ''
 
-  IamNotEnabled:
-    !And
-     - !Equals
-       - !Ref AdminUsers
-       - ''
-     - !Equals
-       - !Ref ReadUsers
-       - ''
+  SchemaIam:
+    !Not
+    - !Equals
+      - SchemaRole
+      - ''
 
   IamEnabled:
+    !Or
+     - !Condition AdminIam
+     - !Condition ReadIam
+
+  IamNotEnabled:
     !Not
-     - !Condition IamNotEnabled
+     - !Condition IamEnabled
 
   SGIngress:
     !Not
@@ -967,13 +969,13 @@ Resources:
 
   DBAdminUserPolicy:
     Type: AWS::IAM::ManagedPolicy
-    Condition: IamEnabled
+    Condition: AdminIam
     Properties:
       ManagedPolicyName: !Join [ "-", [ Admin_User, !Ref ArchPathTag, !Ref AuroraDBPrimaryInstance ] ]
       Description: Managed Policy for admin access to service broker created Aurora MySQL database
       Path: /
       Roles:
-        - !Ref FederatedRole
+        - !Ref AdminRole
       PolicyDocument:
           Version: 2012-10-17
           Statement:
@@ -982,19 +984,34 @@ Resources:
               - rds-db:connect
             Resource:
               - !GetAtt AWSSBInjectedAddDbUsers.AdminUser
-            Condition:
-              StringLike:
-                aws:userid: !GetAtt AWSSBInjectedAddDbUsers.AdminUsers
+
+  DBSchemaUserPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Condition: SchemaIam
+    Properties:
+      ManagedPolicyName: !Join [ "-", [ Schema_User, !Ref ArchPathTag, !Ref AuroraDBPrimaryInstance ] ]
+      Description: Managed Policy for schema pipeline access to service broker created Aurora MySQL database
+      Path: /
+      Roles:
+        - !Ref SchemaRole
+      PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Action:
+              - rds-db:connect
+            Resource:
+              - !GetAtt AWSSBInjectedAddDbUsers.AdminUser
 
   DBReadUserPolicy:
     Type: AWS::IAM::ManagedPolicy
-    Condition: IamEnabled
+    Condition: ReadIam
     Properties:
       ManagedPolicyName: !Join [ "-", [ Read_User, !Ref ArchPathTag, !Ref AuroraDBPrimaryInstance ] ]
       Description: Managed Policy for read access to service broker created Aurora MySQL database
       Path: /
       Roles:
-        - !Ref FederatedRole
+        - !Ref ReadRole
       PolicyDocument:
           Version: 2012-10-17
           Statement:
@@ -1003,9 +1020,6 @@ Resources:
               - rds-db:connect
             Resource:
               - !GetAtt AWSSBInjectedAddDbUsers.ReadUser
-            Condition:
-              StringLike:
-                aws:userid: !GetAtt AWSSBInjectedAddDbUsers.ReadUsers
 
   DBApplicationPolicy:
     Type: AWS::IAM::ManagedPolicy
@@ -1341,7 +1355,8 @@ Resources:
     Properties:
       ServiceToken: !GetAtt AWSSBInjectedCopyZipsLambda.Arn
       DestBucket: !Ref AWSSBInjectedLambdaZipsBucket
-      SourceBucket: micro-aws-servicebroker-templates
+      # Test templates arn:aws:s3:::micro-aws-servicebroker-templates
+      SourceBucket: micro-aws-servicebroker-test-templates
       Prefix: ""
       Objects:
       - functions/generate_password/lambda_function.zip
@@ -1373,7 +1388,8 @@ Resources:
             Action:
             - s3:GetObject
             Resource:
-            - arn:aws:s3:::micro-aws-servicebroker-templates/*
+              # Test templates arn:aws:s3:::micro-aws-servicebroker-test-templates
+            - arn:aws:s3:::micro-aws-servicebroker-test-templates/*
           - Effect: Allow
             Action:
             - s3:PutObject
@@ -1602,8 +1618,6 @@ Resources:
       Cluster: !Ref AuroraDBCluster
       ClusterEndpoint: !GetAtt AuroraDBCluster.Endpoint.Address
       Account: !Ref AWS::AccountId
-      AdminUsers: !Ref AdminUsers
-      ReadUsers: !Ref ReadUsers
       PrimaryRegion: !Ref GlobalPrimaryRegion
   AWSSBInjectedCreateGlobalClusterRole:
     Condition: GlobalCluster
