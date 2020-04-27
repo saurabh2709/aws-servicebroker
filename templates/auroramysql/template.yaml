@@ -1356,7 +1356,7 @@ Resources:
       ServiceToken: !GetAtt AWSSBInjectedCopyZipsLambda.Arn
       DestBucket: !Ref AWSSBInjectedLambdaZipsBucket
       # Test templates arn:aws:s3:::micro-aws-servicebroker-templates
-      SourceBucket: micro-aws-servicebroker-test-templates
+      SourceBucket: micro-aws-servicebroker-templates
       Prefix: ""
       Objects:
       - functions/generate_password/lambda_function.zip
@@ -1389,7 +1389,7 @@ Resources:
             - s3:GetObject
             Resource:
               # Test templates arn:aws:s3:::micro-aws-servicebroker-test-templates
-            - arn:aws:s3:::micro-aws-servicebroker-test-templates/*
+            - arn:aws:s3:::micro-aws-servicebroker-templates/*
           - Effect: Allow
             Action:
             - s3:PutObject
