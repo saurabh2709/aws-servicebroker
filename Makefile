@@ -1,4 +1,4 @@
-IMAGE ?= docker-dc-micro-release.dr.corp.adobe.com/staging/aws-servicebroker
+IMAGE ?= docker-dc-micro-release.dr.corp.adobe.com/staging/awsservicebroker/aws-servicebroker
 TAG  ?= latest
 BUCKET_NAME ?= my-helm-repo-bucket
 BUCKET_PREFIX ?= /charts
