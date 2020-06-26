@@ -120,6 +120,9 @@ venv.bak/
 # mypy
 .mypy_cache/
 
+# vim
+*.sw[op]
+
 templates/rdsmsql-sep/SQLWeb/template.yaml
 templates/rdsmsql-sep/SQLStandard/template.yaml
 templates/rdsmsql-sep/SQLStandard/README.md

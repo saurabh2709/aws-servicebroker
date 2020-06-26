@@ -1,19 +1,19 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'AWS Service Broker - Amazon Aurora MySQL 5.6, 5.7 (qs-1pn9kr5a8)'
+Description: 'AWS Service Broker - Global Amazon Aurora MySQL 5.6, 5.7 (qs-1pn9kr5a8)'
 
 ###############################################################################
 # MetaData - ServiceBroker
 ###############################################################################
 Metadata:
   AWS::ServiceBroker::Specification:
-    Version: 1.1
+    Version: 1.2
     Tags:
     - AWS
     - Aurora
     - MySQL
     - database
-    Name: auroramysql
-    DisplayName: Amazon Aurora MySQL
+    Name: auroramysqlglobal
+    DisplayName: Global Amazon Aurora MySQL
     LongDescription: Amazon Aurora is a relational database service that combines the speed and
       availability of high-end commercial databases with the simplicity and cost-effectiveness of
       open source databases. The MySQL-compatible edition of Aurora delivers up to 5X the throughput
@@ -23,19 +23,20 @@ Metadata:
     DocumentationUrl: https://aws.amazon.com/rds/aurora/
     ProviderDisplayName: Amazon Web Services
     UpdatableParameters:
+      - AccessCidr
+      - AdminRole
       - ArchPathTag
-      - EnvironmentTag
-      - OwnerTag
+      - AutoMinorVersionUpgrade
       - CostCenterTag
       - DataClassificationTag
+      - DBEngineVersion
+      - EnvironmentTag
+      - InboundSGName
+      - OwnerTag
       - PCIDataTag
       - PreferredMaintenanceWindowDay
-      - PreferredMaintenanceWindowStartTime
       - PreferredMaintenanceWindowEndTime
-      - AccessCidr
-      - InboundSGName
-      - AutoMinorVersionUpgrade
-      - AdminRole
+      - PreferredMaintenanceWindowStartTime
       - ReadRole
       - SchemaRole
       - ServiceRole
@@ -47,14 +48,15 @@ Metadata:
           production use
         Cost: https://aws.amazon.com/rds/aurora/pricing/
         ParameterValues:
-          NumberofAuroraReplicas: '2'
-          DBPort: 3306
-          StorageEncrypted: 'true'
+          AutoMinorVersionUpgrade: 'false'
           BackupRetentionPeriod: 35
-          MonitoringInterval: '1'
-          AutoMinorVersionUpgrade: 'true'
-          DBUsername: master
           DBPassword: Auto
+          DBPort: 3306
+          DBUsername: master
+          MonitoringInterval: '1'
+          NumberofAuroraReplicas: '2'
+          StorageEncrypted: 'true'
+          SkipFinalSnapshotOnDeletion: 'true'
       dev:
         DisplayName: Development
         Description: Configuration designed for development and testing deployments
@@ -62,18 +64,19 @@ Metadata:
           dev/test use
         Cost: https://aws.amazon.com/rds/aurora/pricing/
         ParameterValues:
-          NumberofAuroraReplicas: '1'
-          AvailabilityZones: Auto
-          DBPort: 3306
-          StorageEncrypted: 'true'
-          BackupRetentionPeriod: 1
-          MonitoringInterval: '60'
           AutoMinorVersionUpgrade: 'true'
-          DBUsername: master
+          AvailabilityZones: Auto
+          BackupRetentionPeriod: 2
           DBPassword: Auto
+          DBPort: 3306
+          DBUsername: master
+          MonitoringInterval: '60'
+          NumberofAuroraReplicas: '1'
           PreferredMaintenanceWindowDay: Sat
-          PreferredMaintenanceWindowStartTime: 06:00
           PreferredMaintenanceWindowEndTime: 07:00
+          PreferredMaintenanceWindowStartTime: 06:00
+          StorageEncrypted: 'true'
+          SkipFinalSnapshotOnDeletion: 'true'
       custom:
         DisplayName: Custom
         Description: Custom Configuration for Advanced deployments
@@ -138,6 +141,7 @@ Metadata:
           - DeletionProtection
           - RDSTimeZone
           - DBClusterIdentifier
+          - SkipFinalSnapshotOnDeletion
       -
         Label:
           default: Severless Specification (only applicable if Engine Version is 'MySQL 5.6-compatible' and Engine Mode is 'Serverless')
@@ -183,6 +187,8 @@ Metadata:
         default: Access CIDR
       DBClusterIdentifier:
         default: Name of DB Cluster
+      SkipFinalSnapshotOnDeletion:
+        default: Skip Final Snapshot On Deletion
       GlobalClusterIdentifier:
         default: Global Cluster Identifier
       GlobalPrimaryRegion:
@@ -275,6 +281,10 @@ Parameters:
     Description: Name of the DB Cluster
     Type: String
 
+  SkipFinalSnapshotOnDeletion:
+    Description: Skip Final Snapshot On Deletion
+    Type: String
+
   AutoMinorVersionUpgrade:
     Description: Indicates that minor engine upgrades are applied automatically to
       the DB instance during the maintenance window.
@@ -356,6 +366,8 @@ Parameters:
     - 'Aurora-MySQL5.7-2.06.0'
     - 'Aurora-MySQL5.7-2.07.0'
     - 'Aurora-MySQL5.7-2.07.1'
+    - 'Aurora-MySQL5.7-2.07.2'
+    - 'Aurora-MySQL5.7-2.08.1'
 
   DBInstanceClass:
     Default: db.r4.large
@@ -854,30 +866,6 @@ Conditions:
     - !Ref DBEngineMode
     - 'provisioned'
 
-  1replica:
-    !Or
-    - !Equals
-      - !Ref NumberofAuroraReplicas
-      - '1'
-    - !Equals
-      - !Ref NumberofAuroraReplicas
-      - '2'
-
-  2replica:
-    !Equals
-    - !Ref NumberofAuroraReplicas
-    - '2'
-
-  CanCreate1Replica:
-    !And
-    - !Condition ServerlessDisabled
-    - !Condition 1replica
-
-  CanCreate2Replica:
-   !And
-   - !Condition ServerlessDisabled
-   - !Condition 2replica
-
   AutoPassword:
     !Equals
     - !Ref DBPassword
@@ -927,34 +915,14 @@ Conditions:
        - !Ref AccessCidr
        - None
 
-  GlobalCluster:
-    !And
-      - !Not
-        - !Equals
-          - !Ref GlobalClusterIdentifier
-          - ''
-      - !Not
-        - !Equals
-          - !Ref GlobalPrimaryRegion
-          - ''
-
   IsPrimaryRegion:
-    !And
-      - !Condition GlobalCluster
-      - !Equals
-        - !Ref GlobalPrimaryRegion
-        - !Ref AWS::Region
+    !Equals
+      - !Ref GlobalPrimaryRegion
+      - !Ref AWS::Region
 
   IsSecondaryRegion:
-    !And
-      - !Condition GlobalCluster
-      - !Not
-        - !Condition IsPrimaryRegion
-
-  CreatePrimaryDBCluster:
-    !Or
-    - !Condition IsPrimaryRegion
-    - !Not [!Condition GlobalCluster]
+    !Not
+     - !Condition IsPrimaryRegion
 
 ###############################################################################
 # Resources
@@ -968,8 +936,7 @@ Resources:
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
-          -
-            Effect: Allow
+          - Effect: Allow
             Principal:
               Service:
                 - monitoring.rds.amazonaws.com
@@ -983,7 +950,7 @@ Resources:
     Type: AWS::IAM::ManagedPolicy
     Condition: AdminIam
     Properties:
-      ManagedPolicyName: !Join [ "-", [ Admin_User, !Ref ArchPathTag, !Ref AuroraDBPrimaryInstance ] ]
+      ManagedPolicyName: !Join [ "-", [ Admin_User, !Ref ArchPathTag, !Ref GlobalClusterIdentifier, !Ref "AWS::Region"] ]
       Description: Managed Policy for admin access to service broker created Aurora MySQL database
       Path: /
       Roles:
@@ -995,13 +962,13 @@ Resources:
             Action:
               - rds-db:connect
             Resource:
-              - !GetAtt AWSSBInjectedAddDbUsers.AdminUser
+              - !GetAtt AWSSBInjectedRDSGlobal.AdminUser
 
   DBSchemaUserPolicy:
     Type: AWS::IAM::ManagedPolicy
     Condition: SchemaIam
     Properties:
-      ManagedPolicyName: !Join [ "-", [ Schema_User, !Ref ArchPathTag, !Ref AuroraDBPrimaryInstance ] ]
+      ManagedPolicyName: !Join [ "-", [ Schema_User, !Ref ArchPathTag, !Ref GlobalClusterIdentifier, !Ref "AWS::Region"] ]
       Description: Managed Policy for schema pipeline access to service broker created Aurora MySQL database
       Path: /
       Roles:
@@ -1013,13 +980,13 @@ Resources:
             Action:
               - rds-db:connect
             Resource:
-              - !GetAtt AWSSBInjectedAddDbUsers.AdminUser
+              - !GetAtt AWSSBInjectedRDSGlobal.AdminUser
 
   DBReadUserPolicy:
     Type: AWS::IAM::ManagedPolicy
     Condition: ReadIam
     Properties:
-      ManagedPolicyName: !Join [ "-", [ Read_User, !Ref ArchPathTag, !Ref AuroraDBPrimaryInstance ] ]
+      ManagedPolicyName: !Join [ "-", [ Read_User, !Ref ArchPathTag, !Ref GlobalClusterIdentifier, !Ref "AWS::Region"] ]
       Description: Managed Policy for read access to service broker created Aurora MySQL database
       Path: /
       Roles:
@@ -1031,13 +998,13 @@ Resources:
             Action:
               - rds-db:connect
             Resource:
-              - !GetAtt AWSSBInjectedAddDbUsers.ReadUser
+              - !GetAtt AWSSBInjectedRDSGlobal.ReadUser
 
   DBApplicationPolicy:
     Type: AWS::IAM::ManagedPolicy
     Condition: IamEnabled
     Properties:
-      ManagedPolicyName: !Join [ "-", [ App_User, !Ref ArchPathTag, !Ref AuroraDBPrimaryInstance ] ]
+      ManagedPolicyName: !Join [ "-", [ App_User, !Ref ArchPathTag, !Ref GlobalClusterIdentifier, !Ref "AWS::Region"] ]
       Description: Managed Policy for access to service broker created Aurora MySQL database
       Path: /
       Roles:
@@ -1049,7 +1016,7 @@ Resources:
             Action:
               - rds-db:connect
             Resource:
-              - !GetAtt AWSSBInjectedAddDbUsers.ApplicationUser
+              - !GetAtt AWSSBInjectedRDSGlobal.ApplicationUser
 
   DBSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
@@ -1146,7 +1113,7 @@ Resources:
       Family: !FindInMap [DBFamilyMap, !Ref DBEngineVersion, "family"]
       Parameters:
         time_zone: !Ref RDSTimeZone
-        binlog_format: ROW
+        binlog_format: MIXED
         master-info-repository: TABLE
 
   AuroraKMSCMK:
@@ -1182,177 +1149,10 @@ Resources:
   AuroraKMSCMKAlias:
     Type: AWS::KMS::Alias
     DeletionPolicy: Retain
-    DependsOn: AuroraDBCluster
+    DependsOn: AWSSBInjectedGenerateDBName
     Properties:
-      AliasName: !Sub 'alias/${AuroraDBCluster}'
+      AliasName: !Sub 'alias/${DBClusterIdentifier}-${AWSSBInjectedGenerateDBName}'
       TargetKeyId: !Ref AuroraKMSCMK
-
-  AuroraDBCluster:
-    Type: AWS::RDS::DBCluster
-    DeletionPolicy: Snapshot
-    UpdateReplacePolicy: Snapshot
-    Properties:
-      DBClusterIdentifier: !Ref DBClusterIdentifier
-      Engine:  !FindInMap [DBEngineNameMap, !Ref DBEngineVersion, enginename]
-      EngineVersion: !FindInMap [DBEngineVersionMap, !Ref DBEngineVersion, engineversion]
-      EngineMode: !Ref DBEngineMode
-      EnableIAMDatabaseAuthentication: !If [IamEnabled, 'true', 'false']
-      ScalingConfiguration:  !If
-        - ServerlessEnabled
-        - AutoPause: !Ref ServerlessAutoPause
-          MaxCapacity: !Ref ServerlessMaxCapacityUnit
-          MinCapacity: !Ref ServerlessMinCapacityUnit
-          SecondsUntilAutoPause: !Ref ServerlessSecondsUntilAutoPause
-        - !Ref AWS::NoValue
-      DatabaseName: !If
-        - CreatePrimaryDBCluster
-        - !If
-          - AutoDBName
-          - !GetAtt AWSSBInjectedGenerateDBName.DBName
-          - !Ref DBName
-        - !Ref AWS::NoValue
-      Port: !Ref DBPort
-      MasterUsername: !If
-        - CreatePrimaryDBCluster
-        - !Ref DBUsername
-        - !Ref AWS::NoValue
-      MasterUserPassword: !If
-        - CreatePrimaryDBCluster
-        - !If
-          - AutoPassword
-          - !GetAtt AWSSBInjectedGeneratePassword.MasterUserPassword
-          - !Ref DBPassword
-        - !Ref AWS::NoValue
-      DBSubnetGroupName: !Ref DBSubnetGroup
-      VpcSecurityGroupIds:
-      - !Ref ClusterSecurityGroup
-      BackupRetentionPeriod: !Ref BackupRetentionPeriod
-      DBClusterParameterGroupName: !Ref RDSDBClusterParameterGroup
-      StorageEncrypted: !Ref StorageEncrypted
-      KmsKeyId:  !If
-        - EncryptionEnabled
-        - !GetAtt AuroraKMSCMK.Arn
-        - !Ref AWS::NoValue
-      DeletionProtection: !Ref DeletionProtection
-      PreferredMaintenanceWindow: !Sub ${PreferredMaintenanceWindowDay}:${PreferredMaintenanceWindowStartTime}-${PreferredMaintenanceWindowDay}:${PreferredMaintenanceWindowEndTime}
-      ReplicationSourceIdentifier: !If
-        - IsSecondaryRegion
-        - !GetAtt AWSSBInjectedGetGlobalCluster.SourceCluster
-        - !Ref AWS::NoValue
-      SourceRegion: !If
-        - IsSecondaryRegion
-        - !Ref GlobalPrimaryRegion
-        - !Ref AWS::NoValue
-      Tags:
-        - Key: Adobe.ArchPath
-          Value: !Ref ArchPathTag
-        - Key: Adobe.Environment
-          Value: !Ref EnvironmentTag
-        - Key: Adobe.Owner
-          Value: !Ref OwnerTag
-        - Key: Adobe.CostCenter
-          Value: !Ref CostCenterTag
-        - Key: Adobe.DataClassification
-          Value: !Ref DataClassificationTag
-        - Key: Adobe.PCIData
-          Value: !Ref PCIDataTag
-
-  AuroraDBPrimaryInstance:
-    Condition: ServerlessDisabled
-    Type: AWS::RDS::DBInstance
-    Properties:
-      DBInstanceClass:
-        Ref: DBInstanceClass
-      DBClusterIdentifier: !Ref AuroraDBCluster
-      Engine:  !FindInMap [DBEngineNameMap, !Ref DBEngineVersion, enginename]
-      MonitoringInterval: !Ref MonitoringInterval
-      MonitoringRoleArn: !GetAtt MonitoringIAMRole.Arn
-      AutoMinorVersionUpgrade: !Ref AutoMinorVersionUpgrade
-      DBSubnetGroupName: !Ref DBSubnetGroup
-      PubliclyAccessible: !Ref PubliclyAccessible
-      AvailabilityZone:
-        !Select
-        - 0
-        - !GetAtt AWSSBInjectedGetSubnetIds.AvailabilityZones
-      Tags:
-        - Key: Adobe.ArchPath
-          Value: !Ref ArchPathTag
-        - Key: Adobe.Environment
-          Value: !Ref EnvironmentTag
-        - Key: Adobe.Owner
-          Value: !Ref OwnerTag
-        - Key: Adobe.CostCenter
-          Value: !Ref CostCenterTag
-        - Key: Adobe.DataClassification
-          Value: !Ref DataClassificationTag
-        - Key: Adobe.PCIData
-          Value: !Ref PCIDataTag
-
-  AuroraDBReplicaOneInstance:
-    Condition: CanCreate1Replica
-    Type: AWS::RDS::DBInstance
-    DependsOn:
-      - AuroraDBPrimaryInstance
-    Properties:
-      DBInstanceClass:
-        Ref: DBInstanceClass
-      DBClusterIdentifier: !Ref AuroraDBCluster
-      Engine:  !FindInMap [DBEngineNameMap, !Ref DBEngineVersion, enginename]
-      MonitoringInterval: !Ref MonitoringInterval
-      MonitoringRoleArn: !GetAtt MonitoringIAMRole.Arn
-      AutoMinorVersionUpgrade: !Ref AutoMinorVersionUpgrade
-      DBSubnetGroupName: !Ref DBSubnetGroup
-      PubliclyAccessible: !Ref PubliclyAccessible
-      AvailabilityZone:
-        !Select
-        - 1
-        - !GetAtt AWSSBInjectedGetSubnetIds.AvailabilityZones
-      Tags:
-        - Key: Adobe.ArchPath
-          Value: !Ref ArchPathTag
-        - Key: Adobe.Environment
-          Value: !Ref EnvironmentTag
-        - Key: Adobe.Owner
-          Value: !Ref OwnerTag
-        - Key: Adobe.CostCenter
-          Value: !Ref CostCenterTag
-        - Key: Adobe.DataClassification
-          Value: !Ref DataClassificationTag
-        - Key: Adobe.PCIData
-          Value: !Ref PCIDataTag
-
-  AuroraDBReplicaTwoInstance:
-    Condition: CanCreate2Replica
-    Type: AWS::RDS::DBInstance
-    DependsOn:
-      - AuroraDBPrimaryInstance
-    Properties:
-      DBInstanceClass:
-        Ref: DBInstanceClass
-      DBClusterIdentifier: !Ref AuroraDBCluster
-      Engine:  !FindInMap [DBEngineNameMap, !Ref DBEngineVersion, enginename]
-      MonitoringInterval: !Ref MonitoringInterval
-      MonitoringRoleArn: !GetAtt MonitoringIAMRole.Arn
-      AutoMinorVersionUpgrade: !Ref AutoMinorVersionUpgrade
-      DBSubnetGroupName: !Ref DBSubnetGroup
-      PubliclyAccessible: !Ref PubliclyAccessible
-      AvailabilityZone:
-        !Select
-        - 2
-        - !GetAtt AWSSBInjectedGetSubnetIds.AvailabilityZones
-      Tags:
-        - Key: Adobe.ArchPath
-          Value: !Ref ArchPathTag
-        - Key: Adobe.Environment
-          Value: !Ref EnvironmentTag
-        - Key: Adobe.Owner
-          Value: !Ref OwnerTag
-        - Key: Adobe.CostCenter
-          Value: !Ref CostCenterTag
-        - Key: Adobe.DataClassification
-          Value: !Ref DataClassificationTag
-        - Key: Adobe.PCIData
-          Value: !Ref PCIDataTag
 
 ###############################################################################
 # Injected Lambdas
@@ -1367,7 +1167,7 @@ Resources:
     Properties:
       ServiceToken: !GetAtt AWSSBInjectedCopyZipsLambda.Arn
       DestBucket: !Ref AWSSBInjectedLambdaZipsBucket
-      # Test templates arn:aws:s3:::micro-aws-servicebroker-templates
+      # Test templates arn:aws:s3:::micro-aws-servicebroker-test-templates
       SourceBucket: micro-aws-servicebroker-templates
       Prefix: ""
       Objects:
@@ -1375,8 +1175,7 @@ Resources:
       - functions/generate_dbname/lambda_function.zip
       - functions/get_subnet_ids/lambda_function.zip
       - functions/get_sg/lambda_function.zip
-      - functions/add_db_users/lambda_function.zip
-      - functions/create_global_cluster/lambda_function.zip
+      - functions/rds_global/lambda_function.zip
       - layers/requests/lambda_layer.zip
   AWSSBInjectedCopyZipsRole:
     Type: AWS::IAM::Role
@@ -1400,7 +1199,7 @@ Resources:
             Action:
             - s3:GetObject
             Resource:
-              # Test templates arn:aws:s3:::micro-aws-servicebroker-test-templates
+            # Test templates arn:aws:s3:::micro-aws-servicebroker-test-templates
             - arn:aws:s3:::micro-aws-servicebroker-templates/*
           - Effect: Allow
             Action:
@@ -1508,7 +1307,7 @@ Resources:
       Code:
         S3Bucket: !Ref AWSSBInjectedLambdaZipsBucket
         S3Key: functions/get_subnet_ids/lambda_function.zip
-      Runtime: python3.7
+      Runtime: python3.8
       Timeout: '60'
       Layers:
         - !Ref AWSSBRequestsLambdaLayer
@@ -1555,7 +1354,7 @@ Resources:
       Code:
         S3Bucket: !Ref AWSSBInjectedLambdaZipsBucket
         S3Key: functions/get_sg/lambda_function.zip
-      Runtime: python3.7
+      Runtime: python3.8
       Timeout: '60'
       Layers:
         - !Ref AWSSBRequestsLambdaLayer
@@ -1564,163 +1363,6 @@ Resources:
     Properties:
       ServiceToken: !GetAtt AWSSBInjectedGetSGLambda.Arn
       SGName: !Ref InboundSGName
-  AWSSBInjectedAddDbUsersRole:
-    Condition: IamEnabled
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-        - Effect: Allow
-          Principal:
-            Service:
-            - lambda.amazonaws.com
-          Action:
-          - sts:AssumeRole
-      Path: /
-      Policies:
-      - PolicyName: cfn_utility_add_db_user
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Effect: Allow
-            Action:
-            - ec2:CreateNetworkInterface
-            - ec2:DescribeNetworkInterfaces
-            - ec2:DeleteNetworkInterface
-            - logs:CreateLogGroup
-            - logs:CreateLogStream
-            - logs:PutLogEvents
-            - rds:DescribeDBClusters
-            Resource: '*'
-  AWSSBInjectedAddDbUsersLambda:
-    Condition: IamEnabled
-    DependsOn:
-      - AWSSBInjectedCopyZips
-      - AuroraDBPrimaryInstance
-    Type: AWS::Lambda::Function
-    Properties:
-      Handler: lambda_function.handler
-      Role:
-        Fn::GetAtt:
-        - AWSSBInjectedAddDbUsersRole
-        - Arn
-      Code:
-        S3Bucket: !Ref AWSSBInjectedLambdaZipsBucket
-        S3Key: functions/add_db_users/lambda_function.zip
-      Runtime: python3.7
-      Timeout: '130'
-      Layers:
-        - !Ref AWSSBRequestsLambdaLayer
-      VpcConfig:
-        SecurityGroupIds:
-          - !Ref LambdaSecurityGroup
-        SubnetIds: !GetAtt AWSSBInjectedGetSubnetIds.SubnetIDs
-  AWSSBInjectedAddDbUsers:
-    Condition: IamEnabled
-    Type: AWS::CloudFormation::CustomResource
-    Properties:
-      ServiceToken: !GetAtt AWSSBInjectedAddDbUsersLambda.Arn
-      DBPassword:
-        !If
-        - AutoPassword
-        - !GetAtt AWSSBInjectedGeneratePassword.MasterUserPassword
-        - !Ref DBPassword
-      DBUsername: !Ref DBUsername
-      Cluster: !Ref AuroraDBCluster
-      ClusterEndpoint: !GetAtt AuroraDBCluster.Endpoint.Address
-      Account: !Ref AWS::AccountId
-      PrimaryRegion: !Ref GlobalPrimaryRegion
-  AWSSBInjectedCreateGlobalClusterRole:
-    Condition: GlobalCluster
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-        - Effect: Allow
-          Principal:
-            Service:
-            - lambda.amazonaws.com
-          Action:
-          - sts:AssumeRole
-      Path: /
-      Policies:
-      - PolicyName: cfn_utility_create_global_cluster
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Effect: Allow
-            Action:
-            - ec2:CreateNetworkInterface
-            - ec2:DescribeNetworkInterfaces
-            - ec2:DeleteNetworkInterface
-            - logs:CreateLogGroup
-            - logs:CreateLogStream
-            - logs:PutLogEvents
-            - rds:CreateGlobalCluster
-            - rds:DescribeGlobalClusters
-            - rds:DescribeDBClusters
-            Resource: '*'
-  AWSSBInjectedCreateGlobalClusterLambda:
-    Condition: IsPrimaryRegion
-    DependsOn:
-      - AWSSBInjectedCopyZips
-      - AuroraDBPrimaryInstance
-    Type: AWS::Lambda::Function
-    Properties:
-      Handler: lambda_function.handler
-      Role:
-        Fn::GetAtt:
-        - AWSSBInjectedCreateGlobalClusterRole
-        - Arn
-      Code:
-        S3Bucket: !Ref AWSSBInjectedLambdaZipsBucket
-        S3Key: functions/create_global_cluster/lambda_function.zip
-      Runtime: python3.7
-      Timeout: '60'
-      Layers:
-        - !Ref AWSSBRequestsLambdaLayer
-      VpcConfig:
-        SecurityGroupIds:
-          - !Ref LambdaSecurityGroup
-        SubnetIds: !GetAtt AWSSBInjectedGetSubnetIds.SubnetIDs
-  AWSSBInjectedGetGlobalClusterLambda:
-    Condition: IsSecondaryRegion
-    DependsOn:
-      - AWSSBInjectedCopyZips
-    Type: AWS::Lambda::Function
-    Properties:
-      Handler: lambda_function.handler
-      Role:
-        Fn::GetAtt:
-        - AWSSBInjectedCreateGlobalClusterRole
-        - Arn
-      Code:
-        S3Bucket: !Ref AWSSBInjectedLambdaZipsBucket
-        S3Key: functions/create_global_cluster/lambda_function.zip
-      Runtime: python3.7
-      Timeout: '60'
-      Layers:
-        - !Ref AWSSBRequestsLambdaLayer
-      VpcConfig:
-        SecurityGroupIds:
-          - !Ref LambdaSecurityGroup
-        SubnetIds: !GetAtt AWSSBInjectedGetSubnetIds.SubnetIDs
-  AWSSBInjectedCreateGlobalCluster:
-    Condition: IsPrimaryRegion
-    Type: AWS::CloudFormation::CustomResource
-    Properties:
-      ServiceToken: !GetAtt AWSSBInjectedCreateGlobalClusterLambda.Arn
-      GlobalClusterIdentifier: !Ref GlobalClusterIdentifier
-      DBClusterArn: !Join [ ":", [ "arn:aws:rds", !Ref "AWS::Region", !Ref "AWS::AccountId", "cluster", !Ref AuroraDBCluster ] ]
-  AWSSBInjectedGetGlobalCluster:
-    Condition: IsSecondaryRegion
-    Type: AWS::CloudFormation::CustomResource
-    Properties:
-      ServiceToken: !GetAtt AWSSBInjectedGetGlobalClusterLambda.Arn
-      GlobalClusterIdentifier: !Ref GlobalClusterIdentifier
-      DBClusterArn: !Ref AWS::NoValue
   AWSSBInjectedGeneratePasswordRole:
     Type: AWS::IAM::Role
     Properties:
@@ -1757,7 +1399,7 @@ Resources:
       Code:
         S3Bucket: !Ref AWSSBInjectedLambdaZipsBucket
         S3Key: functions/generate_password/lambda_function.zip
-      Runtime: python3.7
+      Runtime: python3.8
       Timeout: '60'
       Layers:
         - !Ref AWSSBRequestsLambdaLayer
@@ -1802,7 +1444,7 @@ Resources:
       Code:
         S3Bucket: !Ref AWSSBInjectedLambdaZipsBucket
         S3Key: functions/generate_dbname/lambda_function.zip
-      Runtime: python3.7
+      Runtime: python3.8
       Timeout: '60'
       Layers:
         - !Ref AWSSBRequestsLambdaLayer
@@ -1811,12 +1453,157 @@ Resources:
     Properties:
       ServiceToken: !GetAtt AWSSBInjectedGenerateDBNameLambda.Arn
       Length: 32
+  AWSSBInjectedRDSGlobalRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: /
+      Policies:
+      - PolicyName: cfn_utility_rds_global
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - ec2:CreateNetworkInterface
+            - ec2:DescribeNetworkInterfaces
+            - ec2:DeleteNetworkInterface
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            - rds:*
+            - iam:PassRole
+            Resource: '*'
+  AWSSBInjectedRDSGlobalLambda:
+    DependsOn: AWSSBInjectedCopyZips
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: lambda_function.handler
+      Role:
+        Fn::GetAtt:
+        - AWSSBInjectedRDSGlobalRole
+        - Arn
+      Code:
+        S3Bucket: !Ref AWSSBInjectedLambdaZipsBucket
+        S3Key: functions/rds_global/lambda_function.zip
+      Runtime: python3.8
+      Timeout: '720'
+      Layers:
+        - !Ref AWSSBRequestsLambdaLayer
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds: !GetAtt AWSSBInjectedGetSubnetIds.SubnetIDs
+  AWSSBInjectedRDSGlobal:
+    Type: Custom::RDSGlobal
+    Properties:
+      AvailabilityZones: !GetAtt AWSSBInjectedGetSubnetIds.AvailabilityZones
+      ClusterProperties:
+        BackupRetentionPeriod: !Ref BackupRetentionPeriod
+        DBClusterIdentifier: !Ref DBClusterIdentifier
+        DBClusterParameterGroupName: !Ref RDSDBClusterParameterGroup
+        DBSubnetGroupName: !Ref DBSubnetGroup
+        Engine:  !FindInMap [DBEngineNameMap, !Ref DBEngineVersion, enginename]
+        EngineVersion: !FindInMap [DBEngineVersionMap, !Ref DBEngineVersion, engineversion]
+        EngineMode: !Ref DBEngineMode
+        EnableIAMDatabaseAuthentication: !If [IamEnabled, 'true', 'false']
+        DatabaseName: !If
+          - IsPrimaryRegion
+          - !If
+            - AutoDBName
+            - !GetAtt AWSSBInjectedGenerateDBName.DBName
+            - !Ref DBName
+          - !Ref AWS::NoValue
+        GlobalClusterIdentifier: !Ref GlobalClusterIdentifier
+        KmsKeyId:  !If
+          - EncryptionEnabled
+          - !GetAtt AuroraKMSCMK.Arn
+          - !Ref AWS::NoValue
+        MasterUsername: !If
+          - IsPrimaryRegion
+          - !Ref DBUsername
+          - !Ref AWS::NoValue
+        MasterUserPassword: !If
+          - IsPrimaryRegion
+          - !If
+            - AutoPassword
+            - !GetAtt AWSSBInjectedGeneratePassword.MasterUserPassword
+            - !Ref DBPassword
+          - !Ref AWS::NoValue
+        Port: !Ref DBPort
+        PreferredMaintenanceWindow: !Sub ${PreferredMaintenanceWindowDay}:${PreferredMaintenanceWindowStartTime}-${PreferredMaintenanceWindowDay}:${PreferredMaintenanceWindowEndTime}
+        ScalingConfiguration:  !If
+          - ServerlessEnabled
+          - AutoPause: !Ref ServerlessAutoPause
+            MaxCapacity: !Ref ServerlessMaxCapacityUnit
+            MinCapacity: !Ref ServerlessMinCapacityUnit
+            SecondsUntilAutoPause: !Ref ServerlessSecondsUntilAutoPause
+          - !Ref AWS::NoValue
+        SkipFinalSnapshotOnDeletion: !Ref SkipFinalSnapshotOnDeletion
+        StorageEncrypted: !Ref StorageEncrypted
+        Tags:
+          - Key: Adobe.ArchPath
+            Value: !Ref ArchPathTag
+          - Key: Adobe.Environment
+            Value: !Ref EnvironmentTag
+          - Key: Adobe.Owner
+            Value: !Ref OwnerTag
+          - Key: Adobe.CostCenter
+            Value: !Ref CostCenterTag
+          - Key: Adobe.DataClassification
+            Value: !Ref DataClassificationTag
+          - Key: Adobe.PCIData
+            Value: !Ref PCIDataTag
+        VpcSecurityGroupIds:
+        - !Ref ClusterSecurityGroup
+      GlobalProperties:
+        DeletionProtection: !Ref DeletionProtection
+        Engine:  !FindInMap [DBEngineNameMap, !Ref DBEngineVersion, enginename]
+        EngineVersion: !FindInMap [DBEngineVersionMap, !Ref DBEngineVersion, engineversion]
+        GlobalClusterIdentifier: !Ref GlobalClusterIdentifier
+        StorageEncrypted: !Ref StorageEncrypted
+      InstanceProperties:
+        AutoMinorVersionUpgrade: !Ref AutoMinorVersionUpgrade
+        DBClusterIdentifier: !Ref DBClusterIdentifier
+        DBInstanceClass: !Ref DBInstanceClass
+        DBSubnetGroupName: !Ref DBSubnetGroup
+        Engine:  !FindInMap [DBEngineNameMap, !Ref DBEngineVersion, enginename]
+        MonitoringInterval: !Ref MonitoringInterval
+        MonitoringRoleArn: !GetAtt MonitoringIAMRole.Arn
+        PubliclyAccessible: !Ref PubliclyAccessible
+        #Availability zone calculated from InjectedGetSubnetIds
+        Tags:
+          - Key: Adobe.ArchPath
+            Value: !Ref ArchPathTag
+          - Key: Adobe.Environment
+            Value: !Ref EnvironmentTag
+          - Key: Adobe.Owner
+            Value: !Ref OwnerTag
+          - Key: Adobe.CostCenter
+            Value: !Ref CostCenterTag
+          - Key: Adobe.DataClassification
+            Value: !Ref DataClassificationTag
+          - Key: Adobe.PCIData
+            Value: !Ref PCIDataTag
+      Mode: failover
+      Replicas: 1
+      SourceRegion: !Ref GlobalPrimaryRegion
+      ServiceToken: !GetAtt AWSSBInjectedRDSGlobalLambda.Arn
+
   AWSSBRequestsLambdaLayer:
     DependsOn: AWSSBInjectedCopyZips
     Type: AWS::Lambda::LayerVersion
     Properties:
       CompatibleRuntimes:
-        - python3.7
+        - python3.8
       Content:
         S3Bucket: !Ref AWSSBInjectedLambdaZipsBucket
         S3Key: layers/requests/lambda_layer.zip
@@ -1830,14 +1617,14 @@ Resources:
 Outputs:
   ClusterEndpoint:
     Description: Aurora Cluster/Writer Endpoint
-    Value: !GetAtt AuroraDBCluster.Endpoint.Address
+    Value: !GetAtt AWSSBInjectedRDSGlobal.Endpoint
   ReaderEndpoint:
     Condition: ServerlessDisabled
     Description: Aurora Reader Endpoint
-    Value: !GetAtt AuroraDBCluster.ReadEndpoint.Address
+    Value: !GetAtt AWSSBInjectedRDSGlobal.ReadEndpoint
   Port:
     Description: Aurora Endpoint Port
-    Value: !GetAtt AuroraDBCluster.Endpoint.Port
+    Value: !Ref DBPort
   DBUsername:
     Description: Database master username
     Value: !Ref DBUsername
@@ -1857,12 +1644,12 @@ Outputs:
   AdminIamUser:
     Description: Admin User Arn
     Condition: IamEnabled
-    Value: !GetAtt AWSSBInjectedAddDbUsers.AdminUser
+    Value: !GetAtt AWSSBInjectedRDSGlobal.AdminUser
   AppIamUser:
     Description: Application User Arn
     Condition: AdminIam
-    Value: !GetAtt AWSSBInjectedAddDbUsers.ApplicationUser
+    Value: !GetAtt AWSSBInjectedRDSGlobal.ApplicationUser
   ReadIamUser:
     Description: Read User Arn
     Condition: ReadIam
-    Value: !GetAtt AWSSBInjectedAddDbUsers.ReadUser
+    Value: !GetAtt AWSSBInjectedRDSGlobal.ReadUser
