@@ -1594,7 +1594,7 @@ Resources:
           - Key: Adobe.PCIData
             Value: !Ref PCIDataTag
       Mode: failover
-      Replicas: 1
+      Replicas: !Ref NumberofAuroraReplicas
       SourceRegion: !Ref GlobalPrimaryRegion
       ServiceToken: !GetAtt AWSSBInjectedRDSGlobalLambda.Arn
 

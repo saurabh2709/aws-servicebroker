@@ -115,7 +115,7 @@ def update_rdsglobal(notification):
     try:
         cluster_response = aws.modify_db_cluster(**cluster_properties)
         aws.add_tags_to_resource(ResourceName=current_db_cluster["DBClusters"][0]["DBClusterArn"],
-                                  Tags=passed_cluster_properties["Tags"])
+                                 Tags=passed_cluster_properties["Tags"])
     except Exception as e:
         print("Cluster Update Failed: {}".format(e))
         result.status = cfnresponse.FAILED
@@ -222,7 +222,7 @@ def create_cluster(cluster_properties, instance_properties, result, num_replicas
     # create db instances
     print("DB instance parameters: {0}".format(instance_properties))
     instance_identifier = instance_properties["DBClusterIdentifier"]
-    for i in range(num_replicas):
+    for i in range(num_replicas+1):
         instance_properties["DBInstanceIdentifier"] = instance_identifier + str(i)
         instance_properties["AvailabilityZone"] = azs[i]
         try:
