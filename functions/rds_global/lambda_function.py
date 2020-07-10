@@ -87,7 +87,98 @@ def update_rdsglobal(notification):
     result.id = notification.get("PhysicalResourceId")
     cfn = notification.get("ResourceProperties", {})
     global_properties = cfn.get("GlobalProperties", {})
+    cluster_properties = cfn.get("ClusterProperties", {})
+    instance_properties = cfn.get("InstanceProperties", {})
 
+    if cfn["Mode"] in ["readonly", ""]:
+        # nothing to update...just generate some return values
+        result.data = {"Arn": aws.get_global_cluster_arn(result.id),
+                       "ResourceId": aws.get_global_cluster_resourceid(result.id),
+                       "DBClusterIdentifier": aws.get_global_writer_arn(result.id).split(":")[-1]}
+        result.status = "SUCCESS"
+        return result
+    if cfn["Mode"] == "failover":
+        # promote replica cluster to standalone
+        db_cluster_arn = aws.get_db_cluster_arn(DBClusterIdentifier=cluster_properties["DBClusterIdentifier"])
+        response = aws.remove_from_global_cluster(DbClusterIdentifier=db_cluster_arn,
+                                                  GlobalClusterIdentifier=result.id)
+
+        if "GlobalClusterIdentifier" in response["GlobalCluster"]:
+            print("'%s' has been removed from '%s'" % (cluster_properties["DBClusterIdentifier"], result.id))
+
+            # Wait for the db cluster to be promoted to standalone
+            print("Waiting 5 minutes before deleting old global cluster")
+            time.sleep(300)
+
+            # deleting old global cluster
+            print("Deleting old global cluster '%s'" % result.id)
+            delete_global_cluster(result.id)
+
+            # add/remove properties needed to create new global cluster
+            global_properties["SourceDBClusterIdentifier"] = db_cluster_arn
+            global_properties.pop("Engine", None)
+            global_properties.pop("EngineVersion", None)
+            global_properties.pop("StorageEncrypted", None)
+
+            # create a new global cluster with master in the failover region
+            response = aws.create_global_cluster(**global_properties)
+            result.id = response["GlobalCluster"].get("GlobalClusterIdentifier")
+            if result.id:
+                result.data = {"Arn": response["GlobalCluster"]["GlobalClusterArn"],
+                               "ResourceId": response["GlobalCluster"]["GlobalClusterResourceId"],
+                               "DBClusterIdentifier": cluster_properties["DBClusterIdentifier"]}
+                result.status = "SUCCESS"
+            else:
+                result.status = "FAILED"
+        else:
+            result.status = "FAILED"
+            print("Could not remove '%s' from global" % cluster_properties["DBClusterIdentifier"])
+        return result
+    if cfn["Mode"] == "postfailover":
+
+        # delete old DB cluster
+        print("Deleting old db clusters and instances")
+        delete_db_cluster(cluster_properties)
+
+        # wait until the db cluster has been deleted
+        id = cluster_properties["DBClusterIdentifier"]
+        wait = 20.
+        wait_max = 500.
+        while wait < wait_max:
+            clusters = aws.describe_db_clusters(DBClusterIdentifier=id)["DBClusters"]
+            if len(clusters) > 0:
+                print("Waiting for %s to be deleted" % id)
+                time.sleep(wait)
+                wait = wait * 2.
+            else:
+                wait = wait_max
+
+        # create new db cluster and instances
+        cluster_properties["SourceRegion"] = cfn["SourceRegion"]
+        result.status = create_cluster(cluster_properties,
+                                       instance_properties,
+                                       result,
+                                       int(cfn["Replicas"]),
+                                       cfn["AvailabilityZones"]
+                                       )
+
+        # generate some return values
+        result.data = {"Arn": aws.get_global_cluster_arn(result.id),
+                       "ResourceId": aws.get_global_cluster_resourceid(result.id),
+                       "DBClusterIdentifier": id}
+
+        return result
+    return modeless_update(notification, result)
+
+
+def modeless_update(notification, result):
+    """
+    :return: CustomResourceResponse object (operation status,
+                                            physical resource identifier,
+                                            additional resource data)
+    """
+    cfn = notification.get("ResourceProperties", {})
+    global_properties = cfn.get("GlobalProperties", {})
     # The following can be modified on the DB cluster:
     cluster_keys = ["DBClusterIdentifier", "EngineVersion", "PreferredMaintenanceWindow", "BackupRetentionPeriod"]
     passed_cluster_properties = cfn.get("ClusterProperties", {})
