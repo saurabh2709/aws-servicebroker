@@ -8,6 +8,7 @@ import time
 import traceback
 
 from awshelper import AwsHelper
+from botocore.exceptions import ClientError
 
 alnum = string.ascii_uppercase + string.ascii_lowercase + string.digits
 
@@ -87,7 +88,95 @@ def update_rdsglobal(notification):
     result.id = notification.get("PhysicalResourceId")
     cfn = notification.get("ResourceProperties", {})
     global_properties = cfn.get("GlobalProperties", {})
+    cluster_properties = cfn.get("ClusterProperties", {})
+    instance_properties = cfn.get("InstanceProperties", {})
 
+    if cfn["Mode"] in ["readonly", ""]:
+        # nothing to update...just generate some return values
+        response = aws.describe_global_clusters(GlobalClusterIdentifier=global_properties["GlobalClusterIdentifier"])
+        source_region = get_source_region(response)
+        result.data["Arn"] = response["GlobalClusters"][0]["GlobalClusterArn"]
+        result.data["ResourceId"] = response["GlobalClusters"][0]["GlobalClusterResourceId"]
+        result.data["DBClusterIdentifier"] = cluster_properties["DBClusterIdentifier"]
+        get_db_cluster_data(cluster_properties, source_region, result)
+        result.status = "SUCCESS"
+        return result
+    if cfn["Mode"] == "failover":
+        # promote replica cluster to standalone
+        # deleting old global cluster
+        print("Deleting old global cluster '%s'" % global_properties["GlobalClusterIdentifier"])
+        delete_global_cluster(global_properties["GlobalClusterIdentifier"])
+
+        # add/remove properties needed to create new global cluster
+        db_cluster_arn = aws.get_db_cluster_arn(DBClusterIdentifier=cluster_properties["DBClusterIdentifier"])
+        get_db_cluster_data(cluster_properties, cfn.get("SourceRegion", ""), result)
+        global_properties["SourceDBClusterIdentifier"] = db_cluster_arn
+        global_properties.pop("Engine", None)
+        global_properties.pop("EngineVersion", None)
+        global_properties.pop("StorageEncrypted", None)
+
+        # create a new global cluster with master in the failover region
+        response = aws.create_global_cluster(**global_properties)
+        result.id = response["GlobalCluster"].get("GlobalClusterIdentifier")
+        if result.id:
+            result.data["Arn"] = response["GlobalCluster"]["GlobalClusterArn"]
+            result.data["ResourceId"] = response["GlobalCluster"]["GlobalClusterResourceId"]
+            result.data["DBClusterIdentifier"] = cluster_properties["DBClusterIdentifier"]
+            result.status = "SUCCESS"
+        else:
+            result.status = "FAILED"
+        return result
+    if cfn["Mode"] == "postfailover":
+
+        # delete old DB cluster
+        print("Deleting old db clusters and instances")
+        delete_db_cluster(cluster_properties)
+
+        # wait until the db cluster has been deleted
+        id = cluster_properties["DBClusterIdentifier"]
+        wait = 20.
+        wait_max = 500.
+        while wait < wait_max:
+            clusters = aws.describe_db_clusters(DBClusterIdentifier=id)["DBClusters"]
+            if len(clusters) > 0:
+                print("Waiting for %s to be deleted" % id)
+                time.sleep(wait)
+                wait = wait * 2.
+            else:
+                wait = wait_max
+
+        # create new db cluster and instances
+        del cluster_properties["DatabaseName"]
+        del cluster_properties["MasterUsername"]
+        del cluster_properties["MasterUserPassword"]
+        response = aws.describe_global_clusters(GlobalClusterIdentifier=global_properties["GlobalClusterIdentifier"])
+        source_region = get_source_region(response)
+        cluster_properties["SourceRegion"] = source_region
+        result = create_cluster(cluster_properties,
+                                       instance_properties,
+                                       result,
+                                       int(cfn["Replicas"]),
+                                       cfn["AvailabilityZones"]
+                                       )
+
+        # generate some return values
+        result.data["Arn"] = response["GlobalClusters"][0]["GlobalClusterArn"]
+        result.data["ResourceId"] = response["GlobalClusters"][0]["GlobalClusterResourceId"]
+        result.data["DBClusterIdentifier"] = cluster_properties["DBClusterIdentifier"]
+        if cluster_properties.get("EnableIAMDatabaseAuthentication", "false") == "true":
+            add_db_user(cluster_properties, result, source_region)
+        return result
+    return modeless_update(notification, result)
+
+
+def modeless_update(notification, result):
+    """
+    :return: CustomResourceResponse object (operation status,
+                                            physical resource identifier,
+                                            additional resource data)
+    """
+    cfn = notification.get("ResourceProperties", {})
+    global_properties = cfn.get("GlobalProperties", {})
     # The following can be modified on the DB cluster:
     cluster_keys = ["DBClusterIdentifier", "EngineVersion", "PreferredMaintenanceWindow", "BackupRetentionPeriod"]
     passed_cluster_properties = cfn.get("ClusterProperties", {})
@@ -115,7 +204,7 @@ def update_rdsglobal(notification):
     try:
         cluster_response = aws.modify_db_cluster(**cluster_properties)
         aws.add_tags_to_resource(ResourceName=current_db_cluster["DBClusters"][0]["DBClusterArn"],
-                                  Tags=passed_cluster_properties["Tags"])
+                                 Tags=passed_cluster_properties["Tags"])
     except Exception as e:
         print("Cluster Update Failed: {}".format(e))
         result.status = cfnresponse.FAILED
@@ -175,7 +264,7 @@ def delete_rdsglobal(notification):
     return result
 
 
-def delete_global_cluster(id):
+def delete_global_cluster(global_cluster_id):
     """
     Delete a global cluster, with all its trimmings
 
@@ -183,13 +272,30 @@ def delete_global_cluster(id):
     :return: None
     """
     # first, remove any members
-    clusters = aws.describe_global_clusters(GlobalClusterIdentifier=id)["GlobalClusters"]
+    clusters = aws.describe_global_clusters(GlobalClusterIdentifier=global_cluster_id)["GlobalClusters"]
     for cluster in clusters:
         for member in cluster["GlobalClusterMembers"]:
-            aws.remove_from_global_cluster(GlobalClusterIdentifier=id,
-                                           DbClusterIdentifier=member["DBClusterArn"])
+            if member["IsWriter"] is False or len(cluster["GlobalClusterMembers"]) == 1:
+                remove_from_global(global_cluster_id, member["DBClusterArn"])
+                if len(cluster["GlobalClusterMembers"]) > 1:
+                    print("Waiting 5 minutes for {} to exit {}".format(member["DBClusterArn"], global_cluster_id))
+                    time.sleep(300)
+                    return delete_global_cluster(global_cluster_id)
     # now we can delete him
-    aws.delete_global_cluster(GlobalClusterIdentifier=id)
+    aws.delete_global_cluster(GlobalClusterIdentifier=global_cluster_id)
+
+
+def remove_from_global(global_cluster_id, db_cluster_id):
+    for attempt in range(3):
+        try:
+            print("Removing {} from global cluster {}".format(db_cluster_id, global_cluster_id))
+            aws.remove_from_global_cluster(GlobalClusterIdentifier=global_cluster_id,
+                                           DbClusterIdentifier=db_cluster_id)
+        except Exception as e:
+            print("Failed to remove {} from global cluster {}\n{}".format(db_cluster_id, global_cluster_id, e))
+
+        else:
+            return
 
 
 def create_cluster(cluster_properties, instance_properties, result, num_replicas, azs):
@@ -211,18 +317,31 @@ def create_cluster(cluster_properties, instance_properties, result, num_replicas
     print("DB cluster parameters: {}, replicas: {}".format(cluster_properties, num_replicas))
     try:
         cluster_response = aws.create_db_cluster(**cluster_properties)
+    except ClientError as e:
+        if e.response.get("Error", {}).get("Code") == "DBClusterAlreadyExistsFault":
+            print("Received DBClusterAlreadyExistsFault waiting 1 minute and trying again")
+            time.sleep(60)
+            # This will keep retrying until the Lambda times out.
+            create_cluster(cluster_properties, instance_properties, result, num_replicas, azs)
+        else:
+            print("Cluster Creation Failed: {}".format(e))
+            result.status = cfnresponse.FAILED
+            return result
     except Exception as e:
         print("Cluster Creation Failed: {}".format(e))
         result.status = cfnresponse.FAILED
         return result
-    result.data["Endpoint"] = cluster_response["DBCluster"]["Endpoint"]
-    result.data["ReadEndpoint"] = cluster_response["DBCluster"]["ReaderEndpoint"]
-    result.data["ClusterResourceId"] = cluster_response["DBCluster"]["DbClusterResourceId"]
+    try:
+        result.data["Endpoint"] = cluster_response["DBCluster"].get("Endpoint")
+        result.data["ReadEndpoint"] = cluster_response["DBCluster"]["ReaderEndpoint"]
+        result.data["ClusterResourceId"] = cluster_response["DBCluster"]["DbClusterResourceId"]
+    except KeyError as e:
+        print("Unexpected results from create_db_cluster {}\n{}".format(e, cluster_response))
 
     # create db instances
     print("DB instance parameters: {0}".format(instance_properties))
     instance_identifier = instance_properties["DBClusterIdentifier"]
-    for i in range(num_replicas):
+    for i in range(num_replicas+1):
         instance_properties["DBInstanceIdentifier"] = instance_identifier + str(i)
         instance_properties["AvailabilityZone"] = azs[i]
         try:
@@ -233,6 +352,18 @@ def create_cluster(cluster_properties, instance_properties, result, num_replicas
             return result
     result.status = cfnresponse.SUCCESS
     return result
+
+
+def get_db_cluster_data(cluster_properties, source_region, result):
+    """
+    Get data from cluster for result outputs.
+    """
+    cluster_response = aws.describe_db_clusters(DBClusterIdentifier=cluster_properties["DBClusterIdentifier"])
+    result.data["Endpoint"] = cluster_response["DBClusters"][0].get("Endpoint")
+    result.data["ReadEndpoint"] = cluster_response["DBClusters"][0]["ReaderEndpoint"]
+    result.data["ClusterResourceId"] = cluster_response["DBClusters"][0]["DbClusterResourceId"]
+    if cluster_properties.get("EnableIAMDatabaseAuthentication", "false") == "true":
+        add_db_user(cluster_properties, result, source_region)
 
 
 def delete_db_cluster(cluster_properties):
@@ -269,6 +400,20 @@ def delete_db_cluster(cluster_properties):
     else:
         print("Could not find DB cluster %s" % id)
     return cfnresponse.SUCCESS
+
+
+def get_source_region(global_cluster_response):
+    """
+    Get writer region from 'describe_global_clusters' response.
+    :param global_cluster_response: output of boto3 describe_global_clusters
+    :return: aws region
+    """
+    clusters = global_cluster_response["GlobalClusters"]
+    for cluster in clusters:
+        for member in cluster["GlobalClusterMembers"]:
+            if member["IsWriter"] is True:
+                return member["DBClusterArn"].split(":")[3]
+    return "unknown"
 
 
 def add_db_user(cluster_properties, result, db_region):
@@ -372,7 +517,7 @@ def handler(event, context):
                 traceback.print_exc()
                 phys_id = event['PhysicalResourceId']
                 cfnresponse.send(event, context, cfnresponse.FAILED, response.data, phys_id, str(e))
-        print("Response Data: {}", response.data)
+        print("Response Data: {}".format(response.data))
         cfnresponse.send(event, context, response.status, response.data, response.id)
     except Exception as e:
         print(str(e))
