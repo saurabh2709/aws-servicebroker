@@ -33,6 +33,7 @@ Metadata:
       - EnvironmentTag
       - InboundSGName
       - OwnerTag
+      - Mode
       - PCIDataTag
       - PreferredMaintenanceWindowDay
       - PreferredMaintenanceWindowEndTime
@@ -120,6 +121,7 @@ Metadata:
           - NumberofAuroraReplicas
           - GlobalClusterIdentifier
           - GlobalPrimaryRegion
+          - Mode
       -
         Label:
           default: Database Specification
@@ -199,6 +201,8 @@ Metadata:
         default: Deletion Protection
       RDSTimeZone:
         default: DB Server Timezone
+      Mode:
+        default: Failover Mode
       PreferredMaintenanceWindowDay:
         default: Preferred Maintenance Window Day
       PreferredMaintenanceWindowStartTime:
@@ -651,6 +655,16 @@ Parameters:
     - US/Pacific
     - UTC
 
+  Mode:
+    Description: Failover Mode.
+    Type: String
+    Default: none
+    AllowedValues:
+    - none
+    - readonly
+    - failover
+    - postfailover
+
   StorageEncrypted:
     Description: Indicates whether the DB instance is encrypted.
     Type: String
@@ -924,6 +938,12 @@ Conditions:
     !Not
      - !Condition IsPrimaryRegion
 
+  ReadOnly:
+    !Equals
+      - !Ref Mode
+      - readonly
+
+
 ###############################################################################
 # Resources
 ###############################################################################
@@ -1109,12 +1129,16 @@ Resources:
   RDSDBClusterParameterGroup:
     Type: AWS::RDS::DBClusterParameterGroup
     Properties:
-      Description: !Join [ "- ", [ "Aurora PG Cluster Parameter Group for Cloudformation Stack ", !Ref DBName ] ]
-      Family: !FindInMap [DBFamilyMap, !Ref DBEngineVersion, "family"]
+      Description: !Join [ '- ', [ 'Aurora PG Cluster Parameter Group for Cloudformation Stack ', !Ref DBName ] ]
+      Family: !FindInMap [DBFamilyMap, !Ref DBEngineVersion, 'family']
       Parameters:
         time_zone: !Ref RDSTimeZone
         binlog_format: MIXED
         master-info-repository: TABLE
+        read_only: !If
+          - ReadOnly
+          - '1'
+          - '0'
 
   AuroraKMSCMK:
     Type: AWS::KMS::Key
@@ -1168,7 +1192,8 @@ Resources:
       ServiceToken: !GetAtt AWSSBInjectedCopyZipsLambda.Arn
       DestBucket: !Ref AWSSBInjectedLambdaZipsBucket
       # Test templates arn:aws:s3:::micro-aws-servicebroker-test-templates
-      SourceBucket: micro-aws-servicebroker-templates
+      #SourceBucket: micro-aws-servicebroker-templates
+      SourceBucket: micro-aws-servicebroker-test-templates
       Prefix: ""
       Objects:
       - functions/generate_password/lambda_function.zip
@@ -1200,7 +1225,8 @@ Resources:
             - s3:GetObject
             Resource:
             # Test templates arn:aws:s3:::micro-aws-servicebroker-test-templates
-            - arn:aws:s3:::micro-aws-servicebroker-templates/*
+            # - arn:aws:s3:::micro-aws-servicebroker-templates/*
+            - arn:aws:s3:::micro-aws-servicebroker-test-templates/*
           - Effect: Allow
             Action:
             - s3:PutObject
@@ -1593,7 +1619,7 @@ Resources:
             Value: !Ref DataClassificationTag
           - Key: Adobe.PCIData
             Value: !Ref PCIDataTag
-      Mode: failover
+      Mode: !Ref Mode
       Replicas: !Ref NumberofAuroraReplicas
       SourceRegion: !Ref GlobalPrimaryRegion
       ServiceToken: !GetAtt AWSSBInjectedRDSGlobalLambda.Arn
