@@ -74,8 +74,8 @@ Metadata:
           MonitoringInterval: '60'
           NumberofAuroraReplicas: '1'
           PreferredMaintenanceWindowDay: Sat
-          PreferredMaintenanceWindowEndTime: 07:00
           PreferredMaintenanceWindowStartTime: 06:00
+          PreferredMaintenanceWindowEndTime: 10:00
           StorageEncrypted: 'true'
           SkipFinalSnapshotOnDeletion: 'true'
       custom:

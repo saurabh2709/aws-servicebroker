@@ -1,14 +1,14 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: AWS Service Broker - Amazon ElastiCache for memcached (qs-1nt0fs92c)
+Description: AWS Service Broker - Amazon ElastiCache for redis (qs-1nt0fs92c)
 Metadata:
   AWS::ServiceBroker::Specification:
-    Version: 1.0
+    Version: 1.1
     Tags:
     - AWS
     - RDS
     - elasticache
-    - memcache
-    Name: elasticache
+    - redis
+    Name: elasticacheredis
     DisplayName: Amazon ElastiCache
     LongDescription: Amazon ElastiCache is a web service that makes it easy to set
       up, manage, and scale distributed in-memory cache environments in the cloud.
@@ -29,17 +29,32 @@ Metadata:
       production:
         DisplayName: Production
         Description: Configuration designed for production deployments
-        LongDescription: Creates an Amazon ElastiCache for memcached, optimized for
+        LongDescription: Creates an Amazon ElastiCache for redis, optimized for
           production use
         Cost: https://aws.amazon.com/elasticache/pricing/
         ParameterValues:
-          ClusterType: multi-node
           AllowVersionUpgrade: 'False'
-          PortNumber: '11211'
-          AZMode: cross-az
+          AutomaticFailover: 'True'
+          NumCacheClusters: 3
           InboundSGName: '*-sgs-eks-workers-*'
           SubnetName: '*-support-*'
           VpcName: "*micro*"
+      dev:
+        DisplayName: Development
+        Description: Configuration designed for development deployments
+        LongDescription: Creates an Amazon ElastiCache for redis, optimized for
+          development use
+        Cost: https://aws.amazon.com/elasticache/pricing/
+        ParameterValues:
+          AllowVersionUpgrade: 'True'
+          AutomaticFailover: 'False'
+          NumCacheClusters: 1
+          InboundSGName: '*-sgs-eks-workers-*'
+          SubnetName: '*-support-*'
+          VpcName: "*micro*"
+          PreferredMaintenanceWindowDay: Sat
+          PreferredMaintenanceWindowStartTime: 06:00
+          PreferredMaintenanceWindowEndTime: 10:00
       custom:
         DisplayName: Custom
         Description: Custom Configuration for Advanced deployments
@@ -51,17 +66,18 @@ Metadata:
     - Label:
         default: Elasticache Settings
       Parameters:
-      - ClusterType
-      - NumCacheNodes
+      - Name
+      - NumCacheClusters
       - EngineVersion
       - CacheNodeType
       - AllowVersionUpgrade
+      - AutomaticFailover
     - Label:
         default: Network and Security
       Parameters:
+      - GenerateAuthToken
       - VpcName
       - PortNumber
-      - AZMode
       - InboundSGName
       - SubnetName
     - Label:
@@ -79,9 +95,9 @@ Metadata:
         - DataClassificationTag
         - PCIDataTag
     ParameterLabels:
-      ClusterType:
-        default: Cluster Type
-      NumCacheNodes:
+      Name:
+        default: Name of service for ReplicationGroupDescription
+      NumCacheClusters:
         default: Number of Cache Nodes
       EngineVersion:
         default: Engine Version
@@ -89,16 +105,18 @@ Metadata:
         default: Cache Node Type
       AllowVersionUpgrade:
         default: Allow Version Upgrade
+      AutomaticFailover:
+        default: Automatic Failover
       VpcName:
         default: Vpc Name
       PortNumber:
         default: Port Number
-      AZMode:
-        default: AZ Mode
       InboundSGName:
         default: Accessing Security Group
       SubnetName:
         default: Subnet Name
+      GenerateAuthToken:
+        default: Generate Auth token. Required for HIPAA Data.
       PreferredMaintenanceWindowStartTime:
         default: Preferred MaintenanceWindow Start Time
       PreferredMaintenanceWindowEndTime:
@@ -195,6 +213,13 @@ Parameters:
     Description: String to match against existing subnets to place the cache
       cluster in (glob wildcards allowed).
     Type: String
+  GenerateAuthToken:
+    Description: Generate Auth Token. Required for HIPAA Data.
+    Type: String
+    Default: 'False'
+    AllowedValues:
+    - 'True'
+    - 'False'
   InboundSGName:
     Description: Existing Security Group name to allow access to database (glob
       wildcards allowed).
@@ -223,25 +248,18 @@ Parameters:
     Description: Family to be used with cluster or parameter group
     Type: String
     AllowedValues:
-    - 1.5.16
-    - 1.5.10
-    - 1.4.34
-    - 1.4.33
-    - 1.4.24
-    - 1.4.14
-    Default: 1.5.16
-  NumCacheNodes:
+    - 5.0.6
+    - 5.0.5
+    - 5.0.4
+    - 5.0.3
+    Default: 5.0.6
+  Name:
+    Description: Name of service for ReplicationGroupDescription.
+    Type: String
+  NumCacheClusters:
     Description: The number of cache nodes in the cluster.
     Type: String
-    Default: '3'
-  ClusterType:
-    Description: The type of cluster. Specify single-node or multi-node (default).  Number
-      of nodes must be greater than 1 for multi-node
-    Type: String
-    AllowedValues:
-    - single-node
-    - multi-node
-    Default: multi-node
+    Default: '1'
   AllowVersionUpgrade:
     Description: Indicates that minor engine upgrades will be applied automatically
       to the cache cluster during the maintenance window. The default value is true.
@@ -250,23 +268,20 @@ Parameters:
     AllowedValues:
     - 'True'
     - 'False'
+  AutomaticFailover:
+    Description: Specifies whether a read-only replica is automatically promoted to
+      read/write primary if the existing primary fails.
+    Type: String
+    Default: 'False'
+    AllowedValues:
+    - 'True'
+    - 'False'
   PortNumber:
     Description: The port number for the Cluster to listen on
     Type: Number
-    Default: 5439
+    Default: 6379
     MinValue: 1150
     MaxValue: 65535
-  AZMode:
-    Description: Specifies whether the nodes in this Memcached cluster are created
-      in a single Availability Zone or created across multiple Availability Zones
-      in the cluster's region. This parameter is only supported for Memcached cache
-      clusters. If the AZMode and PreferredAvailabilityZones are not specified, ElastiCache
-      assumes single-az mode.
-    Type: String
-    Default: cross-az
-    AllowedValues:
-    - single-az
-    - cross-az
   ArchPathTag:
     Description: Cloud Resource Tagging Standard ArchPath
     Type: String
@@ -286,30 +301,45 @@ Parameters:
     Description: Cloud Resource Tagging Standard PCI Data Tag
     Type: String
 
-Mappings:
-  ParameterGroupMap:
-    "1.5.16" : "default.memcached1.5"
-    "1.5.10" : "default.memcached1.5"
-    "1.4.33" : "default.memcached1.4"
-    "1.4.24" : "default.memcached1.4"
-    "1.4.14" : "default.memcached1.4"
+Conditions:
+  AuthEnabled:
+    !Equals
+    - !Ref GenerateAuthToken
+    - 'true'
+
+  MultiAz:
+    !Not
+    - !Equals
+      - !Ref NumCacheClusters
+      - '1'
 
 Resources:
-  ElastiCacheCluster:
-    Type: AWS::ElastiCache::CacheCluster
+  ElastiCacheReplicationGroup:
+    Type: AWS::ElastiCache::ReplicationGroup
     Properties:
+      AtRestEncryptionEnabled: True
+      AuthToken: !If
+        - AuthEnabled
+        - !GetAtt AWSSBInjectedGeneratePassword.MasterUserPassword
+        - !Ref AWS::NoValue
       AutoMinorVersionUpgrade: !Ref AllowVersionUpgrade
-      AZMode: !Ref AZMode
+      AutomaticFailoverEnabled: !Ref AutomaticFailover
       CacheNodeType: !Ref CacheNodeType
-      CacheParameterGroupName: !FindInMap [ParameterGroupMap, !Ref EngineVersion]
+      CacheParameterGroupName: default.redis5.0
       CacheSubnetGroupName: !Ref ClusterSubnetGroup
-      Engine: memcached
+      Engine: redis
       EngineVersion: !Ref EngineVersion
-      NumCacheNodes: !Ref NumCacheNodes
+      MultiAZEnabled: !If
+        - MultiAz
+        - True
+        - False
+      NumCacheClusters: !Ref NumCacheClusters
+      ReplicationGroupDescription: !Ref Name
       Port: !Ref PortNumber
       PreferredMaintenanceWindow: !Sub ${PreferredMaintenanceWindowDay}:${PreferredMaintenanceWindowStartTime}-${PreferredMaintenanceWindowDay}:${PreferredMaintenanceWindowEndTime}
-      VpcSecurityGroupIds:
+      SecurityGroupIds:
       - !Ref ClusterSecurityGroup
+      TransitEncryptionEnabled: True
       Tags:
         - Key: Adobe.ArchPath
           Value: !Ref ArchPathTag
@@ -355,6 +385,7 @@ Resources:
       SourceBucket: micro-aws-servicebroker-templates
       Prefix: ""
       Objects:
+      - functions/generate_password/lambda_function.zip
       - functions/get_subnet_ids/lambda_function.zip
       - functions/get_sg/lambda_function.zip
       - layers/requests/lambda_layer.zip
@@ -555,9 +586,57 @@ Resources:
       Description: Contains requests and cfnresponse.send()
       LayerName: requests
       LicenseInfo: Apache License v2.0, AWS Customer Agreement
+  AWSSBInjectedGeneratePasswordRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: /
+      Policies:
+      - PolicyName: cfn_utility_get_cidrs
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: '*'
+  AWSSBInjectedGeneratePasswordLambda:
+    DependsOn: AWSSBInjectedCopyZips
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: lambda_function.handler
+      Role:
+        Fn::GetAtt:
+        - AWSSBInjectedGeneratePasswordRole
+        - Arn
+      Code:
+        S3Bucket: !Ref AWSSBInjectedLambdaZipsBucket
+        S3Key: functions/generate_password/lambda_function.zip
+      Runtime: python3.7
+      Timeout: '60'
+      Layers:
+        - !Ref AWSSBRequestsLambdaLayer
+  AWSSBInjectedGeneratePassword:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceToken: !GetAtt AWSSBInjectedGeneratePasswordLambda.Arn
+      Length: 64
 Outputs:
   EndpointAddress:
     Value:
       !GetAtt
-      - ElastiCacheCluster
-      - ConfigurationEndpoint.Address
+      - ElastiCacheReplicationGroup
+      - PrimaryEndPoint.Address
+  AuthToken:
+    Value:
+      !GetAtt AWSSBInjectedGeneratePassword.MasterUserPassword
