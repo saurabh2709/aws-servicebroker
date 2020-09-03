@@ -329,6 +329,7 @@ Resources:
       CacheSubnetGroupName: !Ref ClusterSubnetGroup
       Engine: redis
       EngineVersion: !Ref EngineVersion
+      KmsKeyId: !GetAtt AuroraKMSCMK.Arn
       MultiAZEnabled: !If
         - MultiAz
         - True
@@ -373,6 +374,40 @@ Resources:
         FromPort: '-1'
         ToPort: '-1'
         CidrIp: 0.0.0.0/0
+  AuroraKMSCMK:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Retain
+    Properties:
+      EnableKeyRotation: True
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+          Action: 'kms:*'
+          Resource: '*'
+        - Effect: Allow
+          Principal:
+            AWS: '*'
+          Action:
+          - kms:Encrypt
+          - kms:Decrypt
+          - kms:ReEncrypt*
+          - kms:GenerateDataKey*
+          - kms:CreateGrant
+          - kms:ListGrants
+          - kms:DescribeKey
+          Resource: '*'
+          Condition:
+            StringEquals:
+              kms:CallerAccount: !Ref AWS::AccountId
+  AuroraKMSCMKAlias:
+    Type: AWS::KMS::Alias
+    DeletionPolicy: Retain
+    Properties:
+      AliasName: !Sub 'alias/${Name}-${AWS::Region}'
+      TargetKeyId: !Ref AuroraKMSCMK
   AWSSBInjectedLambdaZipsBucket:
     Type: AWS::S3::Bucket
     Properties:
