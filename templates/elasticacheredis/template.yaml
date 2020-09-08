@@ -36,7 +36,7 @@ Metadata:
           AllowVersionUpgrade: 'False'
           AutomaticFailover: 'True'
           NumCacheClusters: 3
-          InboundSGName: '*-sgs-eks-workers-*'
+          InboundSGName: '*-sgs-private'
           SubnetName: '*-support-*'
           VpcName: "*micro*"
       dev:
@@ -49,7 +49,7 @@ Metadata:
           AllowVersionUpgrade: 'True'
           AutomaticFailover: 'False'
           NumCacheClusters: 1
-          InboundSGName: '*-sgs-eks-workers-*'
+          InboundSGName: '*-sgs-private'
           SubnetName: '*-support-*'
           VpcName: "*micro*"
           PreferredMaintenanceWindowDay: Sat
