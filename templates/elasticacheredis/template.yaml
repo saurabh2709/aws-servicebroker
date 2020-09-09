@@ -75,7 +75,6 @@ Metadata:
     - Label:
         default: Network and Security
       Parameters:
-      - GenerateAuthToken
       - VpcName
       - PortNumber
       - InboundSGName
@@ -115,8 +114,6 @@ Metadata:
         default: Accessing Security Group
       SubnetName:
         default: Subnet Name
-      GenerateAuthToken:
-        default: Generate Auth token. Required for HIPAA Data.
       PreferredMaintenanceWindowStartTime:
         default: Preferred MaintenanceWindow Start Time
       PreferredMaintenanceWindowEndTime:
@@ -213,13 +210,6 @@ Parameters:
     Description: String to match against existing subnets to place the cache
       cluster in (glob wildcards allowed).
     Type: String
-  GenerateAuthToken:
-    Description: Generate Auth Token. Required for HIPAA Data.
-    Type: String
-    Default: 'True'
-    AllowedValues:
-    - 'True'
-    - 'False'
   InboundSGName:
     Description: Existing Security Group name to allow access to database (glob
       wildcards allowed).
@@ -302,11 +292,6 @@ Parameters:
     Type: String
 
 Conditions:
-  AuthEnabled:
-    !Equals
-    - !Ref GenerateAuthToken
-    - 'true'
-
   MultiAz:
     !Not
     - !Equals
@@ -318,10 +303,7 @@ Resources:
     Type: AWS::ElastiCache::ReplicationGroup
     Properties:
       AtRestEncryptionEnabled: True
-      AuthToken: !If
-        - AuthEnabled
-        - !GetAtt AWSSBInjectedGeneratePassword.MasterUserPassword
-        - !Ref AWS::NoValue
+      AuthToken: !GetAtt AWSSBInjectedGeneratePassword.MasterUserPassword
       AutoMinorVersionUpgrade: !Ref AllowVersionUpgrade
       AutomaticFailoverEnabled: !Ref AutomaticFailover
       CacheNodeType: !Ref CacheNodeType
