@@ -216,7 +216,7 @@ Parameters:
   GenerateAuthToken:
     Description: Generate Auth Token. Required for HIPAA Data.
     Type: String
-    Default: 'False'
+    Default: 'True'
     AllowedValues:
     - 'True'
     - 'False'
