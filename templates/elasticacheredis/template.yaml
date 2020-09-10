@@ -657,3 +657,7 @@ Outputs:
   AuthToken:
     Value:
       !GetAtt AWSSBInjectedGeneratePassword.MasterUserPassword
+  Port:
+    Value:
+      !Ref PortNumber
+
