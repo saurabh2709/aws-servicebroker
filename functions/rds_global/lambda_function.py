@@ -343,7 +343,9 @@ def create_cluster(cluster_properties, instance_properties, result, num_replicas
     instance_identifier = instance_properties["DBClusterIdentifier"]
     for i in range(num_replicas+1):
         instance_properties["DBInstanceIdentifier"] = instance_identifier + str(i)
-        instance_properties["AvailabilityZone"] = azs[i]
+        # Sometimes there are more replicas than AZs
+        i_az = i % len(azs)
+        instance_properties["AvailabilityZone"] = azs[i_az]
         try:
             aws.create_db_instance(**instance_properties)
         except Exception as e:
