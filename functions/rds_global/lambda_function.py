@@ -153,11 +153,11 @@ def update_rdsglobal(notification):
         source_region = get_source_region(response)
         cluster_properties["SourceRegion"] = source_region
         result = create_cluster(cluster_properties,
-                                       instance_properties,
-                                       result,
-                                       int(cfn["Replicas"]),
-                                       cfn["AvailabilityZones"]
-                                       )
+                                instance_properties,
+                                result,
+                                int(cfn["Replicas"]),
+                                cfn["AvailabilityZones"]
+                                )
 
         # generate some return values
         result.data["Arn"] = response["GlobalClusters"][0]["GlobalClusterArn"]
@@ -341,10 +341,11 @@ def create_cluster(cluster_properties, instance_properties, result, num_replicas
     # create db instances
     print("DB instance parameters: {0}".format(instance_properties))
     instance_identifier = instance_properties["DBClusterIdentifier"]
+    rand_int = random.randrange(12)
     for i in range(num_replicas+1):
         instance_properties["DBInstanceIdentifier"] = instance_identifier + str(i)
         # Sometimes there are more replicas than AZs
-        i_az = i % len(azs)
+        i_az = (i + rand_int) % len(azs)
         instance_properties["AvailabilityZone"] = azs[i_az]
         try:
             aws.create_db_instance(**instance_properties)
