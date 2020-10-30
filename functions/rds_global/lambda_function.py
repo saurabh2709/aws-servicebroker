@@ -215,22 +215,71 @@ def modeless_update(notification, result):
     result.data["ClusterResourceId"] = cluster_response["DBCluster"]["DbClusterResourceId"]
     print("DB instance parameters: {0}".format(instance_properties))
     db_instances = cluster_response["DBCluster"]["DBClusterMembers"]
+    # Dictionary to determine which instance to delete or which az to add instances to.
+    az_instances = {az: [] for az in cluster_response["DBCluster"]["AvailabilityZones"]}
+    writer = "unknown"
+    instance_count = len(db_instances)
     for db_instance in db_instances:
         instance_properties["DBInstanceIdentifier"] = db_instance["DBInstanceIdentifier"]
         instance_arn = aws.get_db_instance_arn(DBInstanceIdentifier=db_instance["DBInstanceIdentifier"])
+        if db_instance["IsClusterWriter"]:
+            writer = db_instance["DBInstanceIdentifier"]
         try:
-            aws.modify_db_instance(**instance_properties)
+            instance_response = aws.modify_db_instance(**instance_properties)
             aws.add_tags_to_resource(ResourceName=instance_arn, Tags=passed_cluster_properties["Tags"])
+            az = instance_response["DBInstance"]["AvailabilityZone"]
+            az_instances[az].append(instance_response["DBInstance"]["DBInstanceIdentifier"])
         except Exception as e:
             print("Instance Update Failed: {}".format(e))
             result.status = cfnresponse.FAILED
             return result
 
+    modify_replica_count(db_instances, writer, instance_count, notification["ResourceProperties"]["Replicas"])
     if passed_cluster_properties.get("EnableIAMDatabaseAuthentication", "false") == "true":
         add_db_user(passed_cluster_properties, result, cfn.get("SourceRegion", ""))
 
     result.status = cfnresponse.SUCCESS
     return result
+
+
+def modify_replica_count(db_instances, writer, current_num_replicas, desired_num_replicas, instance_properties):
+    difference = desired_num_replicas - current_num_replicas
+    # Add replicas
+    while difference > 0:
+        least_populated_az = least_populated(db_instances)
+        instance_properties["AvailabilityZone"] = least_populated_az
+        aws.create_db_instance(**instance_properties)
+        difference -= 1
+    # Subtract replicas
+    while difference < 0:
+        most_populated_az = most_populated(db_instances)
+        instance = db_instances[most_populated_az].pop()
+        if instance == writer:
+            db_instances[most_populated].insert(0, instance)
+            instance = db_instances[most_populated_az].pop()
+        aws.delete_db_instance(DBInstanceIdentifier=instance, SkipFinalSnapshot=True)
+        difference += 1
+    return
+
+
+def least_populated(az_instances):
+    count = 100
+    least_populated_az = "none"
+    for az, instances in az_instances.items():
+        if count > len(instances):
+            count = len(instances)
+            least_populated_az = az
+    return least_populated_az
+
+
+def most_populated(az_instances):
+    count = 0
+    most_populated_az = "none"
+    for az, instances in az_instances.items():
+        if count < len(instances):
+            count = len(instances)
+            most_populated_az = az
+    return most_populated_az
 
 
 def delete_rdsglobal(notification):
@@ -424,7 +473,10 @@ def add_db_user(cluster_properties, result, db_region):
     account = boto3.client('sts').get_caller_identity().get('Account')
     cluster_id = result.data["ClusterResourceId"]
     users = {
-            'admin': 'GRANT ALL ON `%`.* TO {} REQUIRE SSL',
+            'admin': 'GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, RELOAD, PROCESS, REFERENCES, INDEX, ALTER, ' +
+                     'SHOW DATABASES, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, REPLICATION SLAVE, ' +
+                     'REPLICATION CLIENT, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, CREATE USER, EVENT, ' +
+                     'TRIGGER, LOAD FROM S3, SELECT INTO S3 ON *.* TO {} REQUIRE SSL WITH GRANT OPTION',
             'application': 'GRANT SELECT, INSERT, UPDATE, DELETE ON `%`.* TO {} REQUIRE SSL',
             'reader': 'GRANT SELECT ON `%`.* TO {} REQUIRE SSL',
             }
@@ -460,9 +512,10 @@ def add_db_user(cluster_properties, result, db_region):
             cursor.execute(statement)
             if not user_exists(cursor, username):
                 raise Exception("Unable to create User '{}'.".format(username))
-            grant_statement = grant.format(username)
-            print(grant_statement)
-            cursor.execute(grant_statement)
+
+        grant_statement = grant.format(username)
+        print(grant_statement)
+        cursor.execute(grant_statement)
 
         result.data[output_user] = "arn:aws:rds-db:{}:{}:dbuser:{}/{}".format(region, account, cluster_id, username)
         print(result.data[output_user])

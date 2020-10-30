@@ -30,10 +30,13 @@ Metadata:
       - CostCenterTag
       - DataClassificationTag
       - DBEngineVersion
+      - DBInstanceClass
       - EnvironmentTag
       - InboundSGName
+      - LambdaUpdate
       - OwnerTag
       - Mode
+      - NumberofAuroraReplicas
       - PCIDataTag
       - PreferredMaintenanceWindowDay
       - PreferredMaintenanceWindowEndTime
@@ -55,7 +58,6 @@ Metadata:
           DBPort: 3306
           DBUsername: master
           MonitoringInterval: '1'
-          NumberofAuroraReplicas: '2'
           StorageEncrypted: 'true'
           SkipFinalSnapshotOnDeletion: 'true'
       dev:
@@ -169,6 +171,11 @@ Metadata:
           - CostCenterTag
           - DataClassificationTag
           - PCIDataTag
+      -
+        Label:
+          default: Lambda
+        Parameters:
+          - LambdaUpdate
 
     ParameterLabels:
       DBUsername:
@@ -251,6 +258,8 @@ Metadata:
         default: IAM role for schema manipulation
       ServiceRole:
         default: IAM role of the accessing service
+      LambdaUpdate:
+        default: Counter to trigger Lambda function update.
 
 ###############################################################################
 # Parameters
@@ -389,11 +398,6 @@ Parameters:
     - db.r4.2xlarge
     - db.r4.xlarge
     - db.r4.large
-    - db.r3.8xlarge
-    - db.r3.4xlarge
-    - db.r3.2xlarge
-    - db.r3.xlarge
-    - db.r3.large
     - db.t3.2xlarge
     - db.t3.xlarge
     - db.t3.large
@@ -444,13 +448,26 @@ Parameters:
     Default: ''
 
   NumberofAuroraReplicas:
-    Description: Number of Aurora Replicas to deploy in addition to the Primary. Not provisioned if engine mode is Serverless. If selecting 2 replicas, Number Of Availability Zones must be more than 2
+    Description: Number of Aurora Replicas to deploy in addition to the Primary. Not provisioned if engine mode is Serverless.
     Type: String
-    Default: '0'
+    Default: '2'
     AllowedValues:
     - '0'
     - '1'
     - '2'
+    - '3'
+    - '4'
+    - '5'
+    - '6'
+    - '7'
+    - '8'
+    - '9'
+    - '10'
+    - '11'
+    - '12'
+    - '13'
+    - '14'
+    - '15'
 
   GlobalClusterIdentifier:
     Description: Global Cluster Identifier
@@ -716,6 +733,11 @@ Parameters:
     MaxValue: 86400
     MinValue: 300
 
+  LambdaUpdate:
+    Description: Counter to trigger Lambda function update.
+    Type: Number
+    Default: 0
+
 ###############################################################################
 # Mappings
 ###############################################################################
@@ -859,6 +881,50 @@ Mappings:
       "enginename" : "aurora-mysql"
     "Aurora-MySQL5.7-2.08.0":
       "enginename" : "aurora-mysql"
+
+  DBInstanceClassMap:
+    "db.r5.24xlarge":
+      "memory80" : "614G"
+    "db.r5.16xlarge":
+      "memory80" : "410G"
+    "db.r5.12xlarge":
+      "memory80" : "307G"
+    "db.r5.4xlarge" :
+      "memory80" : "102G"
+    "db.r5.2xlarge" :
+      "memory80" : "51G"
+    "db.r5.xlarge" :
+      "memory80" : "26G"
+    "db.r5.large" :
+      "memory80" : "13G"
+    "db.r4.16xlarge" :
+      "memory80" : "390G"
+    "db.r4.8xlarge" :
+      "memory80" : "195G"
+    "db.r4.4xlarge" :
+      "memory80" : "98G"
+    "db.r4.2xlarge" :
+      "memory80" : "50G"
+    "db.r4.xlarge" :
+      "memory80" : "24G"
+    "db.r4.large" :
+      "memory80" : "12G"
+    "db.t3.2xlarge" :
+      "memory80" : "26G"
+    "db.t3.xlarge" :
+      "memory80" : "13G"
+    "db.t3.large" :
+      "memory80" : "6554M"
+    "db.t3.medium" :
+      "memory80" : "3277M"
+    "db.t3.small" :
+      "memory80" : "1638M"
+    "db.t3.micro" :
+      "memory80" : "819M"
+    "db.t2.medium" :
+      "memory80" : "3277M"
+    "db.t2.small" :
+      "memory80" : "1638M"
 
 
 ###############################################################################
@@ -1132,7 +1198,20 @@ Resources:
       Description: !Join [ '- ', [ 'Aurora PG Cluster Parameter Group for Cloudformation Stack ', !Ref DBName ] ]
       Family: !FindInMap [DBFamilyMap, !Ref DBEngineVersion, 'family']
       Parameters:
-        time_zone: !Ref RDSTimeZone
+        net_read_timeout: 30
+        connect_timeout: 10
+        wait_timeout: 240
+        net_write_timeout: 30
+        query_cache_size: 0
+        query_cache_type: 0
+        thread_stack: 524288
+        thread_cache_size: 16
+        table_open_cache: 4096
+        table_open_cache_instances: 2
+        slow_query_log: 1
+        long_query_time: 1
+        innodb_buffer_pool_size: "{DBInstanceClassMemory*4/5}"
+        innodb_lock_wait_timeout: 180
         binlog_format: MIXED
         master-info-repository: TABLE
         read_only: !If
@@ -1192,7 +1271,7 @@ Resources:
       ServiceToken: !GetAtt AWSSBInjectedCopyZipsLambda.Arn
       DestBucket: !Ref AWSSBInjectedLambdaZipsBucket
       # Test templates arn:aws:s3:::micro-aws-servicebroker-test-templates
-      SourceBucket: micro-aws-servicebroker-templates
+      SourceBucket: micro-aws-servicebroker-test-templates
       Prefix: ""
       Objects:
       - functions/generate_password/lambda_function.zip
@@ -1201,6 +1280,7 @@ Resources:
       - functions/get_sg/lambda_function.zip
       - functions/rds_global/lambda_function.zip
       - layers/requests/lambda_layer.zip
+      LambdaUpdate: !Ref LambdaUpdate
   AWSSBInjectedCopyZipsRole:
     Type: AWS::IAM::Role
     Properties:
@@ -1224,7 +1304,7 @@ Resources:
             - s3:GetObject
             Resource:
             # Test templates arn:aws:s3:::micro-aws-servicebroker-test-templates
-            - arn:aws:s3:::micro-aws-servicebroker-templates/*
+            - arn:aws:s3:::micro-aws-servicebroker-test-templates/*
           - Effect: Allow
             Action:
             - s3:PutObject
@@ -1341,6 +1421,7 @@ Resources:
       ServiceToken: !GetAtt AWSSBInjectedGetSubnetIdsLambda.Arn
       VpcName: !Ref VpcName
       SubnetName: !Ref SubnetName
+      LambdaUpdate: !Ref LambdaUpdate
   AWSSBInjectedGetSGRole:
     Type: AWS::IAM::Role
     Properties:
@@ -1387,6 +1468,7 @@ Resources:
     Properties:
       ServiceToken: !GetAtt AWSSBInjectedGetSGLambda.Arn
       SGName: !Ref InboundSGName
+      LambdaUpdate: !Ref LambdaUpdate
   AWSSBInjectedGeneratePasswordRole:
     Type: AWS::IAM::Role
     Properties:
@@ -1621,6 +1703,7 @@ Resources:
       Replicas: !Ref NumberofAuroraReplicas
       SourceRegion: !Ref GlobalPrimaryRegion
       ServiceToken: !GetAtt AWSSBInjectedRDSGlobalLambda.Arn
+      LambdaUpdate: !Ref LambdaUpdate
 
   AWSSBRequestsLambdaLayer:
     DependsOn: AWSSBInjectedCopyZips
