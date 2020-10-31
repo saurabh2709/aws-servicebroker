@@ -70,8 +70,8 @@ def create_rdsglobal(notification):
                                 cfn["AvailabilityZones"]
                                 )
 
-        print("Waiting 7 minutes to let clusters be available")
-        time.sleep(420)
+        print("Waiting 9 minutes to let clusters be available")
+        time.sleep(540)
 
     if cluster_properties.get("EnableIAMDatabaseAuthentication", "false") == "true":
         add_db_user(cluster_properties, result, cfn.get("SourceRegion", ""))
@@ -213,7 +213,6 @@ def modeless_update(notification, result):
     result.data["Endpoint"] = cluster_response["DBCluster"]["Endpoint"]
     result.data["ReadEndpoint"] = cluster_response["DBCluster"]["ReaderEndpoint"]
     result.data["ClusterResourceId"] = cluster_response["DBCluster"]["DbClusterResourceId"]
-    print("DB instance parameters: {0}".format(instance_properties))
     db_instances = cluster_response["DBCluster"]["DBClusterMembers"]
     # Dictionary to determine which instance to delete or which az to add instances to.
     az_instances = {az: [] for az in cluster_response["DBCluster"]["AvailabilityZones"]}
@@ -221,6 +220,7 @@ def modeless_update(notification, result):
     instance_count = len(db_instances)
     for db_instance in db_instances:
         instance_properties["DBInstanceIdentifier"] = db_instance["DBInstanceIdentifier"]
+        print("DB instance parameters: {0}".format(instance_properties))
         instance_arn = aws.get_db_instance_arn(DBInstanceIdentifier=db_instance["DBInstanceIdentifier"])
         if db_instance["IsClusterWriter"]:
             writer = db_instance["DBInstanceIdentifier"]
@@ -234,7 +234,9 @@ def modeless_update(notification, result):
             result.status = cfnresponse.FAILED
             return result
 
-    modify_replica_count(db_instances, writer, instance_count, notification["ResourceProperties"]["Replicas"])
+    print("DB writer {0}".format(writer))
+    modify_replica_count(db_instances, writer, instance_count, notification["ResourceProperties"]["Replicas"],
+                         cfn.get("InstanceProperties", {}))
     if passed_cluster_properties.get("EnableIAMDatabaseAuthentication", "false") == "true":
         add_db_user(passed_cluster_properties, result, cfn.get("SourceRegion", ""))
 
@@ -242,11 +244,14 @@ def modeless_update(notification, result):
     return result
 
 
-def modify_replica_count(db_instances, writer, current_num_replicas, desired_num_replicas, instance_properties):
-    difference = desired_num_replicas - current_num_replicas
+def modify_replica_count(db_instances, writer, current_count, desired_num_replicas, instance_properties):
+    # current count is the writer plus the number of replicas.
+    difference = desired_num_replicas + 1 - current_count
     # Add replicas
     while difference > 0:
         least_populated_az = least_populated(db_instances)
+        available_id = find_available_id(db_instances, instance_properties["DBInstanceIdentifier"])
+        instance_properties["DBInstanceIdentifier"] = available_id
         instance_properties["AvailabilityZone"] = least_populated_az
         aws.create_db_instance(**instance_properties)
         difference -= 1
@@ -260,6 +265,14 @@ def modify_replica_count(db_instances, writer, current_num_replicas, desired_num
         aws.delete_db_instance(DBInstanceIdentifier=instance, SkipFinalSnapshot=True)
         difference += 1
     return
+
+
+def find_available_id(az_instances, identifier):
+    instance_identifiers = {instance: None for instances in az_instances.values() for instance in instances}
+    for i in range(100):
+        new_identifier = identifier + str(i)
+        if new_identifier not in instance_identifiers:
+            return new_identifier
 
 
 def least_populated(az_instances):

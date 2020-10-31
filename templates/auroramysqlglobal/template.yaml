@@ -1273,12 +1273,13 @@ Resources:
       # Test templates arn:aws:s3:::micro-aws-servicebroker-test-templates
       SourceBucket: micro-aws-servicebroker-test-templates
       Prefix: ""
+      # Update Objects with new function versions. Lambda functions must have their source updated as well.
       Objects:
       - functions/generate_password/lambda_function.zip
       - functions/generate_dbname/lambda_function.zip
       - functions/get_subnet_ids/lambda_function.zip
       - functions/get_sg/lambda_function.zip
-      - functions/rds_global/lambda_function.zip
+      - functions/rds_global1.1/lambda_function.zip
       - layers/requests/lambda_layer.zip
       LambdaUpdate: !Ref LambdaUpdate
   AWSSBInjectedCopyZipsRole:
@@ -1599,7 +1600,7 @@ Resources:
         - Arn
       Code:
         S3Bucket: !Ref AWSSBInjectedLambdaZipsBucket
-        S3Key: functions/rds_global/lambda_function.zip
+        S3Key: functions/rds_global1.1/lambda_function.zip
       Runtime: python3.8
       Timeout: '720'
       Layers:
