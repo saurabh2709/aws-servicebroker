@@ -1,5 +1,6 @@
 import boto3
 import cfnresponse
+import logging
 import mysql.connector
 import random
 import socket
@@ -18,6 +19,11 @@ region = client.meta.region_name
 
 aws = AwsHelper(region)
 
+# our logger
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+logger.setLevel(logging.INFO)
+
 
 def create_rdsglobal(notification):
     """
@@ -35,14 +41,14 @@ def create_rdsglobal(notification):
     response = aws.describe_global_clusters(GlobalClusterIdentifier=global_properties["GlobalClusterIdentifier"])
     if len(response["GlobalClusters"]) > 0:
         # yes...this is the secondary region or retry of primary
-        print("Global cluster exists (Secondary region or Primary Retry)")
+        logger.info("Global cluster exists (Secondary region or Primary Retry)")
         result.id = response["GlobalClusters"][0]["GlobalClusterIdentifier"]
         result.data["Arn"] = response["GlobalClusters"][0]["GlobalClusterArn"]
         result.data["ResourceId"] = response["GlobalClusters"][0]["GlobalClusterResourceId"]
         cluster_properties["SourceRegion"] = cfn.get("SourceRegion", "")
     else:
         # no...this is the primary region
-        print("Global cluster does not exist (Primary region) - creating new global database")
+        logger.info("Global cluster does not exist (Primary region) - creating new global database")
         create_response = aws.create_global_cluster(**global_properties)
         result.id = create_response["GlobalCluster"]["GlobalClusterIdentifier"]
         result.data["Arn"] = create_response["GlobalCluster"]["GlobalClusterArn"]
@@ -70,7 +76,7 @@ def create_rdsglobal(notification):
                                 cfn["AvailabilityZones"]
                                 )
 
-        print("Waiting 9 minutes to let clusters be available")
+        logger.info("Waiting 9 minutes to let clusters be available")
         time.sleep(540)
 
     if cluster_properties.get("EnableIAMDatabaseAuthentication", "false") == "true":
@@ -104,7 +110,7 @@ def update_rdsglobal(notification):
     if cfn["Mode"] == "failover":
         # promote replica cluster to standalone
         # deleting old global cluster
-        print("Deleting old global cluster '%s'" % global_properties["GlobalClusterIdentifier"])
+        logger.info("Deleting old global cluster '%s'" % global_properties["GlobalClusterIdentifier"])
         delete_global_cluster(global_properties["GlobalClusterIdentifier"])
 
         # add/remove properties needed to create new global cluster
@@ -129,7 +135,7 @@ def update_rdsglobal(notification):
     if cfn["Mode"] == "postfailover":
 
         # delete old DB cluster
-        print("Deleting old db clusters and instances")
+        logger.info("Deleting old db clusters and instances")
         delete_db_cluster(cluster_properties)
 
         # wait until the db cluster has been deleted
@@ -139,7 +145,7 @@ def update_rdsglobal(notification):
         while wait < wait_max:
             clusters = aws.describe_db_clusters(DBClusterIdentifier=id)["DBClusters"]
             if len(clusters) > 0:
-                print("Waiting for %s to be deleted" % id)
+                logger.info("Waiting for %s to be deleted" % id)
                 time.sleep(wait)
                 wait = wait * 2.
             else:
@@ -190,7 +196,8 @@ def modeless_update(notification, result):
 
     # Only AutoMinorVersionUpgrade can be modified on the instance.
     passed_instance_properties = cfn.get("InstanceProperties", {})
-    instance_properties = {"AutoMinorVersionUpgrade": passed_instance_properties["AutoMinorVersionUpgrade"]}
+    instance_properties = {"AutoMinorVersionUpgrade": passed_instance_properties["AutoMinorVersionUpgrade"],
+                           "DBInstanceClass": passed_instance_properties["DBInstanceClass"]}
 
     # Fetch return values from global cluster. These cannot be modified.
     response = aws.describe_global_clusters(GlobalClusterIdentifier=global_properties["GlobalClusterIdentifier"])
@@ -199,44 +206,47 @@ def modeless_update(notification, result):
     result.data["ResourceId"] = response["GlobalClusters"][0]["GlobalClusterResourceId"]
     result.data["DBClusterIdentifier"] = cluster_properties["DBClusterIdentifier"]
 
-    print("Modifying DB cluster and instances")
-    print("DB cluster parameters: {}".format(cluster_properties))
+    logger.info("Modifying DB cluster and instances")
+    logger.info("DB cluster parameters: {}".format(cluster_properties))
     try:
         cluster_response = aws.modify_db_cluster(**cluster_properties)
         aws.add_tags_to_resource(ResourceName=current_db_cluster["DBClusters"][0]["DBClusterArn"],
                                  Tags=passed_cluster_properties["Tags"])
+    except (rds_client.exceptions.InvalidDBClusterStateFault, rds_client.exceptions.InvalidDBInstanceStateFault) as e:
+        # Do not break Service Instance for this, update can happen later.
+        logger.warn("Cluster Not Ready for Update: {}".format(e))
+        result.status = cfnresponse.SUCCESS
+        return result
+
     except Exception as e:
-        print("Cluster Update Failed: {}".format(e))
+        logger.error("Cluster Update Failed: {}".format(e))
         result.status = cfnresponse.FAILED
         return result
 
     result.data["Endpoint"] = cluster_response["DBCluster"]["Endpoint"]
     result.data["ReadEndpoint"] = cluster_response["DBCluster"]["ReaderEndpoint"]
     result.data["ClusterResourceId"] = cluster_response["DBCluster"]["DbClusterResourceId"]
+    logger.info("DB instance parameters: {0}".format(instance_properties))
     db_instances = cluster_response["DBCluster"]["DBClusterMembers"]
-    # Dictionary to determine which instance to delete or which az to add instances to.
-    az_instances = {az: [] for az in cluster_response["DBCluster"]["AvailabilityZones"]}
-    writer = "unknown"
-    instance_count = len(db_instances)
+    deleted_instances = modify_replica_count(notification, cluster_response)
     for db_instance in db_instances:
+        if db_instance["DBInstanceIdentifier"] in deleted_instances:
+            continue
         instance_properties["DBInstanceIdentifier"] = db_instance["DBInstanceIdentifier"]
-        print("DB instance parameters: {0}".format(instance_properties))
         instance_arn = aws.get_db_instance_arn(DBInstanceIdentifier=db_instance["DBInstanceIdentifier"])
-        if db_instance["IsClusterWriter"]:
-            writer = db_instance["DBInstanceIdentifier"]
         try:
-            instance_response = aws.modify_db_instance(**instance_properties)
-            aws.add_tags_to_resource(ResourceName=instance_arn, Tags=passed_cluster_properties["Tags"])
-            az = instance_response["DBInstance"]["AvailabilityZone"]
-            az_instances[az].append(instance_response["DBInstance"]["DBInstanceIdentifier"])
+            aws.modify_db_instance(**instance_properties)
+            aws.add_tags_to_resource(ResourceName=instance_arn, Tags=passed_cluster_properties.get("Tags"))
+        except rds_client.exceptions.InvalidDBInstanceStateFault as e:
+            # Do not break Service Instance for this, update can happen later.
+            logger.warn("Instance Not Ready for Update: {}".format(e))
+            result.status = cfnresponse.SUCCESS
+            return result
         except Exception as e:
-            print("Instance Update Failed: {}".format(e))
+            logger.error("Instance Update Failed: {}".format(e))
             result.status = cfnresponse.FAILED
             return result
 
-    print("DB writer {0}".format(writer))
-    modify_replica_count(db_instances, writer, instance_count, notification["ResourceProperties"]["Replicas"],
-                         cfn.get("InstanceProperties", {}))
     if passed_cluster_properties.get("EnableIAMDatabaseAuthentication", "false") == "true":
         add_db_user(passed_cluster_properties, result, cfn.get("SourceRegion", ""))
 
@@ -244,27 +254,55 @@ def modeless_update(notification, result):
     return result
 
 
-def modify_replica_count(db_instances, writer, current_count, desired_num_replicas, instance_properties):
-    # current count is the writer plus the number of replicas.
-    difference = desired_num_replicas + 1 - current_count
+def modify_replica_count(notification, cluster_response):
+    """
+    :return: list of deleted replicas
+    """
+    writer = "unknown"
+    db_instances = cluster_response["DBCluster"]["DBClusterMembers"]
+    instance_properties = notification["ResourceProperties"]["InstanceProperties"]
+    deleted_replicas = []
+    # Current instance count is the writer plus the number of replicas.
+    current_replica_count = len(db_instances) - 1
+
+    # Dictionary to determine which instance to delete or which az to add instances to.
+    az_instances = {az: [] for az in cluster_response["DBCluster"]["AvailabilityZones"]}
+    for db_instance in db_instances:
+        if db_instance["IsClusterWriter"]:
+            writer = db_instance["DBInstanceIdentifier"]
+        az = aws.get_db_instance_az(DBInstanceIdentifier=db_instance["DBInstanceIdentifier"])
+        az_instances[az].append(db_instance["DBInstanceIdentifier"])
+
+    desired_num_replicas = notification["ResourceProperties"]["Replicas"]
+    logger.info("DB writer {0}".format(writer))
+    logger.info("Instance Properties: {}".format(instance_properties))
+    difference = int(desired_num_replicas) - current_replica_count
     # Add replicas
     while difference > 0:
-        least_populated_az = least_populated(db_instances)
-        available_id = find_available_id(db_instances, instance_properties["DBInstanceIdentifier"])
+        least_populated_az = least_populated(az_instances)
+        available_id = find_available_id(az_instances, instance_properties["DBClusterIdentifier"])
         instance_properties["DBInstanceIdentifier"] = available_id
         instance_properties["AvailabilityZone"] = least_populated_az
+        logger.info("Adding replica {0}".format(available_id))
         aws.create_db_instance(**instance_properties)
+        az_instances[least_populated_az].append(available_id)
         difference -= 1
-    # Subtract replicas
+    # Delete replicas
     while difference < 0:
-        most_populated_az = most_populated(db_instances)
-        instance = db_instances[most_populated_az].pop()
+        most_populated_az = most_populated(az_instances)
+        instance = az_instances[most_populated_az].pop()
         if instance == writer:
-            db_instances[most_populated].insert(0, instance)
-            instance = db_instances[most_populated_az].pop()
-        aws.delete_db_instance(DBInstanceIdentifier=instance, SkipFinalSnapshot=True)
+            az_instances[most_populated_az].insert(0, instance)
+            instance = az_instances[most_populated_az].pop()
+        logger.info("Deleting replica {0}".format(instance))
+        deleted_replicas.append(instance)
+        try:
+            aws.delete_db_instance(DBInstanceIdentifier=instance, SkipFinalSnapshot=True)
+        except rds_client.exceptions.InvalidDBInstanceStateFault as e:
+            # Do not break Service Instance for this, update can happen later.
+            logger.warn("Cluster Not Ready for Update: {}".format(e))
         difference += 1
-    return
+    return deleted_replicas
 
 
 def find_available_id(az_instances, identifier):
@@ -278,6 +316,7 @@ def find_available_id(az_instances, identifier):
 def least_populated(az_instances):
     count = 100
     least_populated_az = "none"
+    logger.info("az_instances {0}".format(az_instances))
     for az, instances in az_instances.items():
         if count > len(instances):
             count = len(instances)
@@ -315,10 +354,10 @@ def delete_rdsglobal(notification):
         arn = aws.get_db_cluster_arn(DBClusterIdentifier=cluster_properties["DBClusterIdentifier"])
         response = aws.remove_from_global_cluster(GlobalClusterIdentifier=result.id, DbClusterIdentifier=arn)
         if "GlobalClusterIdentifier" in response["GlobalCluster"]:
-            print("'%s' has been removed from '%s'" % (cluster_properties["DBClusterIdentifier"],
+            logger.info("'%s' has been removed from '%s'" % (cluster_properties["DBClusterIdentifier"],
                                                        response["GlobalCluster"]["GlobalClusterIdentifier"]))
             # wait for the db cluster to be promoted to standalone
-            print("Waiting 2 minutes before deleting old DB cluster")
+            logger.info("Waiting 2 minutes before deleting old DB cluster")
             time.sleep(120)
 
     # now delete the leftover db cluster
@@ -340,7 +379,7 @@ def delete_global_cluster(global_cluster_id):
             if member["IsWriter"] is False or len(cluster["GlobalClusterMembers"]) == 1:
                 remove_from_global(global_cluster_id, member["DBClusterArn"])
                 if len(cluster["GlobalClusterMembers"]) > 1:
-                    print("Waiting 5 minutes for {} to exit {}".format(member["DBClusterArn"], global_cluster_id))
+                    logger.info("Waiting 5 minutes for {} to exit {}".format(member["DBClusterArn"], global_cluster_id))
                     time.sleep(300)
                     return delete_global_cluster(global_cluster_id)
     # now we can delete him
@@ -350,11 +389,11 @@ def delete_global_cluster(global_cluster_id):
 def remove_from_global(global_cluster_id, db_cluster_id):
     for attempt in range(3):
         try:
-            print("Removing {} from global cluster {}".format(db_cluster_id, global_cluster_id))
+            logger.info("Removing {} from global cluster {}".format(db_cluster_id, global_cluster_id))
             aws.remove_from_global_cluster(GlobalClusterIdentifier=global_cluster_id,
                                            DbClusterIdentifier=db_cluster_id)
         except Exception as e:
-            print("Failed to remove {} from global cluster {}\n{}".format(db_cluster_id, global_cluster_id, e))
+            logger.error("Failed to remove {} from global cluster {}\n{}".format(db_cluster_id, global_cluster_id, e))
 
         else:
             return
@@ -375,22 +414,12 @@ def create_cluster(cluster_properties, instance_properties, result, num_replicas
     cluster_properties.pop("SkipFinalSnapshotOnDeletion", None)
 
     # create db cluster
-    print("Creating DB cluster and instances")
-    print("DB cluster parameters: {}, replicas: {}".format(cluster_properties, num_replicas))
+    logger.info("Creating DB cluster and instances")
+    logger.info("DB cluster parameters: {}, replicas: {}".format(cluster_properties, num_replicas))
     try:
         cluster_response = aws.create_db_cluster(**cluster_properties)
-    except ClientError as e:
-        if e.response.get("Error", {}).get("Code") == "DBClusterAlreadyExistsFault":
-            print("Received DBClusterAlreadyExistsFault waiting 1 minute and trying again")
-            time.sleep(60)
-            # This will keep retrying until the Lambda times out.
-            create_cluster(cluster_properties, instance_properties, result, num_replicas, azs)
-        else:
-            print("Cluster Creation Failed: {}".format(e))
-            result.status = cfnresponse.FAILED
-            return result
     except Exception as e:
-        print("Cluster Creation Failed: {}".format(e))
+        logger.error("Cluster Creation Failed: {}".format(e))
         result.status = cfnresponse.FAILED
         return result
     try:
@@ -398,10 +427,10 @@ def create_cluster(cluster_properties, instance_properties, result, num_replicas
         result.data["ReadEndpoint"] = cluster_response["DBCluster"]["ReaderEndpoint"]
         result.data["ClusterResourceId"] = cluster_response["DBCluster"]["DbClusterResourceId"]
     except KeyError as e:
-        print("Unexpected results from create_db_cluster {}\n{}".format(e, cluster_response))
+        logger.error("Unexpected results from create_db_cluster {}\n{}".format(e, cluster_response))
 
     # create db instances
-    print("DB instance parameters: {0}".format(instance_properties))
+    logger.info("DB instance parameters: {0}".format(instance_properties))
     instance_identifier = instance_properties["DBClusterIdentifier"]
     rand_int = random.randrange(12)
     for i in range(num_replicas+1):
@@ -412,7 +441,7 @@ def create_cluster(cluster_properties, instance_properties, result, num_replicas
         try:
             aws.create_db_instance(**instance_properties)
         except Exception as e:
-            print("Instance Creation Failed: {}".format(e))
+            logger.error("Instance Creation Failed: {}".format(e))
             result.status = cfnresponse.FAILED
             return result
     result.status = cfnresponse.SUCCESS
@@ -452,18 +481,18 @@ def delete_db_cluster(cluster_properties):
                 else:
                     # delete reader instances
                     aws.delete_db_instance(DBInstanceIdentifier=instance["DBInstanceIdentifier"])
-                    print("Deleted %s" % instance["DBInstanceIdentifier"])
+                    logger.info("Deleted %s" % instance["DBInstanceIdentifier"])
             # now delete writer instances
             for writer in writers:
                 aws.delete_db_instance(DBInstanceIdentifier=writer)
-                print("Deleted %s" % writer)
+                logger.info("Deleted %s" % writer)
         except Exception:
-            print("Could not delete DB instance from cluster %s" % id)
+            logger.error("Could not delete DB instance from cluster %s" % id)
 
         # now we can delete the cluster
         aws.delete_db_cluster(DBClusterIdentifier=id, SkipFinalSnapshot=skip)
     else:
-        print("Could not find DB cluster %s" % id)
+        logger.warn("Could not find DB cluster %s" % id)
     return cfnresponse.SUCCESS
 
 
@@ -501,7 +530,7 @@ def add_db_user(cluster_properties, result, db_region):
             else:
                 output_user = username.capitalize() + "User"
             result.data[output_user] = "arn:aws:rds-db:{}:{}:dbuser:{}/{}".format(region, account, cluster_id, username)
-            print("User {}: {}".format(output_user, result.data[output_user]))
+            logger.info("User {}: {}".format(output_user, result.data[output_user]))
         return
 
     master_user = cluster_properties["MasterUsername"]
@@ -510,7 +539,7 @@ def add_db_user(cluster_properties, result, db_region):
 
     # wait for domain name to propagate
     wait_domain_name(endpoint)
-    print("endpoint: {}, id: {}".format(endpoint, cluster_id))
+    logger.info("endpoint: {}, id: {}".format(endpoint, cluster_id))
     # master user does not have super privileges, cannot grant 'ALL PRIVILEGES ON *.*'.
     rdsdb = mysql.connector.connect(host=endpoint, user=master_user, password=master_password)
     cursor = rdsdb.cursor(buffered=True)
@@ -521,17 +550,17 @@ def add_db_user(cluster_properties, result, db_region):
             output_user = username.capitalize() + "User"
         if not user_exists(cursor, username):
             statement = """CREATE USER {} IDENTIFIED WITH AWSAuthenticationPlugin AS 'RDS';""".format(username)
-            print(statement)
+            logger.info(statement)
             cursor.execute(statement)
             if not user_exists(cursor, username):
                 raise Exception("Unable to create User '{}'.".format(username))
 
         grant_statement = grant.format(username)
-        print(grant_statement)
+        logger.info(grant_statement)
         cursor.execute(grant_statement)
 
         result.data[output_user] = "arn:aws:rds-db:{}:{}:dbuser:{}/{}".format(region, account, cluster_id, username)
-        print(result.data[output_user])
+        logger.info(result.data[output_user])
 
     rdsdb.close()
     return
@@ -540,9 +569,9 @@ def add_db_user(cluster_properties, result, db_region):
 def user_exists(cursor, username):
     # Verify user was created.
     statement = """SELECT User FROM mysql.user WHERE User ='{}'""".format(username)
-    print(statement)
+    logger.info(statement)
     cursor.execute(statement)
-    print(cursor.rowcount)
+    logger.info(cursor.rowcount)
     if cursor.rowcount < 1:
         return False
     return True
@@ -555,7 +584,7 @@ def wait_domain_name(hostname):
         try:
             socket.gethostbyname(hostname)
         except socket.gaierror as err:
-            print("domain resolution error: {}".format(err))
+            logger.info("domain resolution error: {}".format(err))
         else:
             return
         time.sleep(period)
@@ -564,13 +593,14 @@ def wait_domain_name(hostname):
 
 def handler(event, context):
     response = CustomResourceResponse()
+    logger.info("Event: {}".format(event))
     try:
         if event['RequestType'] == 'Create':
             try:
                 response = create_rdsglobal(event)
-                print("Response Data: {}", response.data)
+                logger.info("Response Data: {}", response.data)
             except Exception as e:
-                print(str(e))
+                logger.info(str(e))
                 traceback.print_exc()
                 phys_id = ''.join(random.choice(alnum) for _ in range(16))
                 cfnresponse.send(event, context, cfnresponse.FAILED, response.data, phys_id, str(e))
@@ -582,14 +612,14 @@ def handler(event, context):
             try:
                 response = delete_rdsglobal(event)
             except Exception as e:
-                print(str(e))
+                logger.info(str(e))
                 traceback.print_exc()
                 phys_id = event['PhysicalResourceId']
                 cfnresponse.send(event, context, cfnresponse.FAILED, response.data, phys_id, str(e))
-        print("Response Data: {}".format(response.data))
+        logger.info("Response Data: {}".format(response.data))
         cfnresponse.send(event, context, response.status, response.data, response.id)
     except Exception as e:
-        print(str(e))
+        logger.info(str(e))
         traceback.print_exc()
         cfnresponse.send(event, context, cfnresponse.FAILED, response.data, response.id, str(e))
 

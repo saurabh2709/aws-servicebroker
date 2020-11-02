@@ -6,7 +6,7 @@ Description: 'AWS Service Broker - Global Amazon Aurora MySQL 5.6, 5.7 (qs-1pn9k
 ###############################################################################
 Metadata:
   AWS::ServiceBroker::Specification:
-    Version: 1.2
+    Version: 1.3
     Tags:
     - AWS
     - Aurora
@@ -58,6 +58,9 @@ Metadata:
           DBPort: 3306
           DBUsername: master
           MonitoringInterval: '1'
+          PreferredMaintenanceWindowDay: Sat
+          PreferredMaintenanceWindowStartTime: 06:00
+          PreferredMaintenanceWindowEndTime: 10:00
           StorageEncrypted: 'true'
           SkipFinalSnapshotOnDeletion: 'true'
       dev:
@@ -777,6 +780,8 @@ Mappings:
       "family" : "aurora-mysql5.7"
     "Aurora-MySQL5.7-2.04.8":
       "family" : "aurora-mysql5.7"
+    "Aurora-MySQL5.7-2.04.9":
+      "family" : "aurora-mysql5.7"
     "Aurora-MySQL5.7-2.05.0":
       "family" : "aurora-mysql5.7"
     "Aurora-MySQL5.7-2.06.0":
@@ -788,6 +793,12 @@ Mappings:
     "Aurora-MySQL5.7-2.07.2":
       "family" : "aurora-mysql5.7"
     "Aurora-MySQL5.7-2.08.0":
+      "family" : "aurora-mysql5.7"
+    "Aurora-MySQL5.7-2.08.1":
+      "family" : "aurora-mysql5.7"
+    "Aurora-MySQL5.7-2.08.2":
+      "family" : "aurora-mysql5.7"
+    "Aurora-MySQL5.7-2.09.0":
       "family" : "aurora-mysql5.7"
 
   DBEngineVersionMap:
@@ -823,6 +834,8 @@ Mappings:
       "engineversion" : "5.7.mysql_aurora.2.04.7"
     "Aurora-MySQL5.7-2.04.8":
       "engineversion" : "5.7.mysql_aurora.2.04.8"
+    "Aurora-MySQL5.7-2.04.9":
+      "engineversion" : "5.7.mysql_aurora.2.04.9"
     "Aurora-MySQL5.7-2.05.0":
       "engineversion" : "5.7.mysql_aurora.2.05.0"
     "Aurora-MySQL5.7-2.06.0":
@@ -835,6 +848,12 @@ Mappings:
       "engineversion" : "5.7.mysql_aurora.2.07.2"
     "Aurora-MySQL5.7-2.08.0":
       "engineversion" : "5.7.mysql_aurora.2.08.0"
+    "Aurora-MySQL5.7-2.08.1":
+      "engineversion" : "5.7.mysql_aurora.2.08.1"
+    "Aurora-MySQL5.7-2.08.2":
+      "engineversion" : "5.7.mysql_aurora.2.08.2"
+    "Aurora-MySQL5.7-2.09.0":
+      "engineversion" : "5.7.mysql_aurora.2.09.0"
 
   DBEngineNameMap:
     "Aurora-MySQL5.6.10a":
@@ -869,6 +888,8 @@ Mappings:
       "enginename" : "aurora-mysql"
     "Aurora-MySQL5.7-2.04.8":
       "enginename" : "aurora-mysql"
+    "Aurora-MySQL5.7-2.04.9":
+      "enginename" : "aurora-mysql"
     "Aurora-MySQL5.7-2.05.0":
       "enginename" : "aurora-mysql"
     "Aurora-MySQL5.7-2.06.0":
@@ -880,6 +901,12 @@ Mappings:
     "Aurora-MySQL5.7-2.07.2":
       "enginename" : "aurora-mysql"
     "Aurora-MySQL5.7-2.08.0":
+      "enginename" : "aurora-mysql"
+    "Aurora-MySQL5.7-2.08.1":
+      "enginename" : "aurora-mysql"
+    "Aurora-MySQL5.7-2.08.2":
+      "enginename" : "aurora-mysql"
+    "Aurora-MySQL5.7-2.09.0":
       "enginename" : "aurora-mysql"
 
   DBInstanceClassMap:
@@ -1273,13 +1300,14 @@ Resources:
       # Test templates arn:aws:s3:::micro-aws-servicebroker-test-templates
       SourceBucket: micro-aws-servicebroker-test-templates
       Prefix: ""
-      # Update Objects with new function versions. Lambda functions must have their source updated as well.
+      # To update a function, increment the version file in the function directory and then append
+      # the version both here and in the appropriate Lambda function below.
       Objects:
       - functions/generate_password/lambda_function.zip
       - functions/generate_dbname/lambda_function.zip
       - functions/get_subnet_ids/lambda_function.zip
       - functions/get_sg/lambda_function.zip
-      - functions/rds_global1.1/lambda_function.zip
+      - functions/rds_global1.4/lambda_function.zip
       - layers/requests/lambda_layer.zip
       LambdaUpdate: !Ref LambdaUpdate
   AWSSBInjectedCopyZipsRole:
@@ -1600,7 +1628,7 @@ Resources:
         - Arn
       Code:
         S3Bucket: !Ref AWSSBInjectedLambdaZipsBucket
-        S3Key: functions/rds_global1.1/lambda_function.zip
+        S3Key: functions/rds_global1.4/lambda_function.zip
       Runtime: python3.8
       Timeout: '720'
       Layers:

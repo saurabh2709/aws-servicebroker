@@ -50,6 +50,8 @@ ISO8601FORMAT = "%Y-%m-%dT%H:%M:%S.000Z"
 
 # our logger
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+logger.setLevel(logging.INFO)
 
 
 def fixer(client, operation):
@@ -1043,7 +1045,9 @@ class AwsHelper(object):
 
     @fixer("rds", "ModifyDBCluster")
     def modify_db_cluster(self, **kwargs):
-        return aws_call(lambda: self.rds.modify_db_cluster(**kwargs))
+        return aws_call(lambda: self.rds.modify_db_cluster(**kwargs),
+                        retry=["InvalidDBClusterStateFault","InvalidDBInstanceState"],  # we might have to wait for the instance to become available
+                        wait_max=300.0)
 
     @fixer("rds", "CreateDBCluster")
     def create_db_cluster(self, **kwargs):
@@ -1082,6 +1086,10 @@ class AwsHelper(object):
     def get_db_instance_arn(self, **kwargs):
         dbs = self.describe_db_instances(**kwargs)["DBInstances"]
         return dbs[0]["DBInstanceArn"] if len(dbs) > 0 else "arn:aws:rds:us-east-1:XXXXXXXXXXXX:db:XXXXXX"
+
+    def get_db_instance_az(self, **kwargs):
+        dbs = self.describe_db_instances(**kwargs)["DBInstances"]
+        return dbs[0]["AvailabilityZone"] if len(dbs) > 0 else "XX-XXX-X"
 
     def get_db_cluster_arn(self, **kwargs):
         dbs = self.describe_db_clusters(**kwargs)["DBClusters"]
@@ -1423,7 +1431,7 @@ def aws_call(function, retry=[], ignore=[], wait_max=RETRY_WAIT_MAX):
             error_code = e.response["Error"].get("Code", "Unknown")
             if error_code in retry + ["Throttling", "RequestLimitExceeded"] and wait < wait_max:
                 # sleep and retry
-                logger.warn("%s, retry in %.3f seconds" % (e.message, wait))
+                logger.warn("%s, retry in %.3f seconds" % (e, wait))
                 time.sleep(wait)
                 wait = wait * RETRY_WAIT_FACTOR
             elif error_code in ignore:
