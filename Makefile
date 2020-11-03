@@ -99,7 +99,7 @@ functions: ## Package and upload functions
 	mkdir -p release/$(VERSION)$(FUNCTION_PREFIX)/ && \
 	cp -a functions functions-staging && \
 	cd functions-staging && \
-	for i in $(FUNCTIONS) ; do mkdir -p ../release/$(VERSION)$(FUNCTION_PREFIX)/$$i ; cd $$i ; pip3 install -r requirements.txt --target . ; zip -r lambda_function * -x .* -x '*bin/*' ; cp lambda_function.zip ../../release/$(VERSION)$(FUNCTION_PREFIX)/$$i ; cd .. ; done && \
+	for i in $(FUNCTIONS) ; do cd $$i ; echo $$(pwd); cat version; if [ -e version ]; then export FUNCTION_VERSION=$$(cat version) ; else unset FUNCTION_VERSION ; fi; pip3 install -r requirements.txt --target . ; zip -r lambda_function * -x .* -x '*bin/*' ; mkdir -p ../../release/$(VERSION)$(FUNCTION_PREFIX)/$$i$$FUNCTION_VERSION ; cp lambda_function.zip ../../release/$(VERSION)$(FUNCTION_PREFIX)/$$i$$FUNCTION_VERSION ; cd .. ; done && \
 	cd .. && \
 	aws s3 cp --recursive release/$(VERSION)$(FUNCTION_PREFIX)/ s3://$(BUCKET_NAME)$(FUNCTION_PREFIX)/ --acl $(ACL) $(PROFILE) && \
 	rm -rf functions-staging && \
