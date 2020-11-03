@@ -1298,7 +1298,7 @@ Resources:
       ServiceToken: !GetAtt AWSSBInjectedCopyZipsLambda.Arn
       DestBucket: !Ref AWSSBInjectedLambdaZipsBucket
       # Test templates arn:aws:s3:::micro-aws-servicebroker-test-templates
-      SourceBucket: micro-aws-servicebroker-test-templates
+      SourceBucket: micro-aws-servicebroker-templates
       Prefix: ""
       # To update a function, increment the version file in the function directory and then append
       # the version both here and in the appropriate Lambda function below.
@@ -1307,7 +1307,7 @@ Resources:
       - functions/generate_dbname/lambda_function.zip
       - functions/get_subnet_ids/lambda_function.zip
       - functions/get_sg/lambda_function.zip
-      - functions/rds_global1.4/lambda_function.zip
+      - functions/rds_global1.0/lambda_function.zip
       - layers/requests/lambda_layer.zip
       LambdaUpdate: !Ref LambdaUpdate
   AWSSBInjectedCopyZipsRole:
@@ -1333,7 +1333,7 @@ Resources:
             - s3:GetObject
             Resource:
             # Test templates arn:aws:s3:::micro-aws-servicebroker-test-templates
-            - arn:aws:s3:::micro-aws-servicebroker-test-templates/*
+            - arn:aws:s3:::micro-aws-servicebroker-templates/*
           - Effect: Allow
             Action:
             - s3:PutObject
@@ -1628,7 +1628,7 @@ Resources:
         - Arn
       Code:
         S3Bucket: !Ref AWSSBInjectedLambdaZipsBucket
-        S3Key: functions/rds_global1.4/lambda_function.zip
+        S3Key: functions/rds_global1.0/lambda_function.zip
       Runtime: python3.8
       Timeout: '720'
       Layers:
