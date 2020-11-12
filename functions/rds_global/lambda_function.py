@@ -9,7 +9,6 @@ import time
 import traceback
 
 from awshelper import AwsHelper
-from botocore.exceptions import ClientError
 
 alnum = string.ascii_uppercase + string.ascii_lowercase + string.digits
 
@@ -248,7 +247,7 @@ def modeless_update(notification, result):
             return result
 
     if passed_cluster_properties.get("EnableIAMDatabaseAuthentication", "false") == "true":
-        add_db_user(passed_cluster_properties, result, cfn.get("SourceRegion", ""))
+        add_db_user(passed_cluster_properties, result, cfn.get("SourceRegion", ""), True)
 
     result.status = cfnresponse.SUCCESS
     return result
@@ -355,7 +354,7 @@ def delete_rdsglobal(notification):
         response = aws.remove_from_global_cluster(GlobalClusterIdentifier=result.id, DbClusterIdentifier=arn)
         if "GlobalClusterIdentifier" in response["GlobalCluster"]:
             logger.info("'%s' has been removed from '%s'" % (cluster_properties["DBClusterIdentifier"],
-                                                       response["GlobalCluster"]["GlobalClusterIdentifier"]))
+                                                             response["GlobalCluster"]["GlobalClusterIdentifier"]))
             # wait for the db cluster to be promoted to standalone
             logger.info("Waiting 2 minutes before deleting old DB cluster")
             time.sleep(120)
@@ -510,7 +509,7 @@ def get_source_region(global_cluster_response):
     return "unknown"
 
 
-def add_db_user(cluster_properties, result, db_region):
+def add_db_user(cluster_properties, result, db_region, reapply=False):
     # Required for User ARN.
     account = boto3.client('sts').get_caller_identity().get('Account')
     cluster_id = result.data["ClusterResourceId"]
@@ -544,6 +543,7 @@ def add_db_user(cluster_properties, result, db_region):
     rdsdb = mysql.connector.connect(host=endpoint, user=master_user, password=master_password)
     cursor = rdsdb.cursor(buffered=True)
     for username, grant in users.items():
+        grant_statement = grant.format(username)
         if username == "reader":
             output_user = "ReadUser"
         else:
@@ -555,9 +555,11 @@ def add_db_user(cluster_properties, result, db_region):
             if not user_exists(cursor, username):
                 raise Exception("Unable to create User '{}'.".format(username))
 
-        grant_statement = grant.format(username)
-        logger.info(grant_statement)
-        cursor.execute(grant_statement)
+            logger.info(grant_statement)
+            cursor.execute(grant_statement)
+        elif reapply is True:
+            logger.info(grant_statement)
+            cursor.execute(grant_statement)
 
         result.data[output_user] = "arn:aws:rds-db:{}:{}:dbuser:{}/{}".format(region, account, cluster_id, username)
         logger.info(result.data[output_user])
