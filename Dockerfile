@@ -1,4 +1,4 @@
-FROM deis/go-dev as builder
+FROM docker-hub-remote.dr.corp.adobe.com/deis/go-dev as builder
 
 ENV PROJECT_DIR=/go/src/github.com/adobe-platform/aws-servicebroker
 RUN mkdir -p $PROJECT_DIR
@@ -9,7 +9,7 @@ COPY $SOURCE_DIR .
 
 RUN dep ensure && make test && make linux
 
-FROM alpine:latest
+FROM docker-hub-remote.dr.corp.adobe.com/alpine:latest
 
 RUN apk add --no-cache ca-certificates bash
 
