@@ -113,14 +113,14 @@ def update_rdsglobal(notification):
         delete_global_cluster(global_properties["GlobalClusterIdentifier"])
 
         # add/remove properties needed to create new global cluster
-        db_cluster_arn = aws.get_db_cluster_arn(DBClusterIdentifier=cluster_properties["DBClusterIdentifier"])
-        get_db_cluster_data(cluster_properties, cfn.get("SourceRegion", ""), result)
+        db_cluster_arn = get_db_cluster_data(cluster_properties, cfn.get("SourceRegion", ""), result)
         global_properties["SourceDBClusterIdentifier"] = db_cluster_arn
         global_properties.pop("Engine", None)
         global_properties.pop("EngineVersion", None)
         global_properties.pop("StorageEncrypted", None)
 
         # create a new global cluster with master in the failover region
+        logger.info("Creating new global cluster {}".format(global_properties))
         response = aws.create_global_cluster(**global_properties)
         result.id = response["GlobalCluster"].get("GlobalClusterIdentifier")
         if result.id:
@@ -451,12 +451,19 @@ def get_db_cluster_data(cluster_properties, source_region, result):
     """
     Get data from cluster for result outputs.
     """
-    cluster_response = aws.describe_db_clusters(DBClusterIdentifier=cluster_properties["DBClusterIdentifier"])
+    cluster_response = {}
+    logger.info("Source Region {}, Region {}".format(source_region, region))
+    if source_region == region:
+        cluster_response = aws.describe_db_clusters(DBClusterIdentifier=cluster_properties["DBClusterIdentifier"])
+    else:
+        cluster_response = boto3.client("rds", source_region).describe_db_clusters(DBClusterIdentifier=cluster_properties["DBClusterIdentifier"])
+    logger.info("Cluster Response {}".format(cluster_response))
     result.data["Endpoint"] = cluster_response["DBClusters"][0].get("Endpoint")
     result.data["ReadEndpoint"] = cluster_response["DBClusters"][0]["ReaderEndpoint"]
     result.data["ClusterResourceId"] = cluster_response["DBClusters"][0]["DbClusterResourceId"]
     if cluster_properties.get("EnableIAMDatabaseAuthentication", "false") == "true":
         add_db_user(cluster_properties, result, source_region)
+    return cluster_response["DBClusters"][0]["DBClusterArn"]
 
 
 def delete_db_cluster(cluster_properties):
