@@ -151,9 +151,9 @@ def update_rdsglobal(notification):
                 wait = wait_max
 
         # create new db cluster and instances
-        del cluster_properties["DatabaseName"]
-        del cluster_properties["MasterUsername"]
-        del cluster_properties["MasterUserPassword"]
+        cluster_properties.pop("DatabaseName", None)
+        cluster_properties.pop("MasterUsername", None)
+        cluster_properties.pop("MasterUserPassword", None)
         response = aws.describe_global_clusters(GlobalClusterIdentifier=global_properties["GlobalClusterIdentifier"])
         source_region = get_source_region(response)
         cluster_properties["SourceRegion"] = source_region
@@ -191,7 +191,7 @@ def modeless_update(notification, result):
     # For some reason the engine version cannot be passed if it is unchanged. No other parameters have this behavior.
     current_db_cluster = aws.describe_db_clusters(DBClusterIdentifier=cluster_properties["DBClusterIdentifier"])
     if current_db_cluster["DBClusters"][0]["EngineVersion"] == cluster_properties["EngineVersion"]:
-        del cluster_properties["EngineVersion"]
+        cluster_properties.pop("EngineVersion", None)
 
     # Only AutoMinorVersionUpgrade can be modified on the instance.
     passed_instance_properties = cfn.get("InstanceProperties", {})
@@ -520,6 +520,7 @@ def add_db_user(cluster_properties, result, db_region, reapply=False):
     # Required for User ARN.
     account = boto3.client('sts').get_caller_identity().get('Account')
     cluster_id = result.data["ClusterResourceId"]
+    # master user does not have super privileges, cannot grant 'ALL PRIVILEGES ON *.*'.
     users = {
             'admin': 'GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, RELOAD, PROCESS, REFERENCES, INDEX, ALTER, ' +
                      'SHOW DATABASES, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, REPLICATION SLAVE, ' +
@@ -546,8 +547,11 @@ def add_db_user(cluster_properties, result, db_region, reapply=False):
     # wait for domain name to propagate
     wait_domain_name(endpoint)
     logger.info("endpoint: {}, id: {}".format(endpoint, cluster_id))
-    # master user does not have super privileges, cannot grant 'ALL PRIVILEGES ON *.*'.
-    rdsdb = mysql.connector.connect(host=endpoint, user=master_user, password=master_password)
+    try:
+        rdsdb = mysql.connector.connect(host=endpoint, user=master_user, password=master_password)
+    except:
+        logger.info("Unable to log into MySQL server")
+        return
     cursor = rdsdb.cursor(buffered=True)
     for username, grant in users.items():
         grant_statement = grant.format(username)
