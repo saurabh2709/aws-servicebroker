@@ -530,14 +530,15 @@ def add_db_user(cluster_properties, result, db_region, reapply=False):
             'reader': 'GRANT SELECT ON `%`.* TO {} REQUIRE SSL',
             }
 
+    for username in users.keys():
+        if username == "reader":
+            output_user = "ReadUser"
+        else:
+            output_user = username.capitalize() + "User"
+        result.data[output_user] = "arn:aws:rds-db:{}:{}:dbuser:{}/{}".format(region, account, cluster_id, username)
+        logger.info("User {}: {}".format(output_user, result.data[output_user]))
+
     if db_region and region != db_region:
-        for username in users.keys():
-            if username == "reader":
-                output_user = "ReadUser"
-            else:
-                output_user = username.capitalize() + "User"
-            result.data[output_user] = "arn:aws:rds-db:{}:{}:dbuser:{}/{}".format(region, account, cluster_id, username)
-            logger.info("User {}: {}".format(output_user, result.data[output_user]))
         return
 
     master_user = cluster_properties["MasterUsername"]
@@ -550,15 +551,12 @@ def add_db_user(cluster_properties, result, db_region, reapply=False):
     try:
         rdsdb = mysql.connector.connect(host=endpoint, user=master_user, password=master_password)
     except:
+        # Login will fail if Cluster has failed over.
         logger.info("Unable to log into MySQL server")
         return
     cursor = rdsdb.cursor(buffered=True)
     for username, grant in users.items():
         grant_statement = grant.format(username)
-        if username == "reader":
-            output_user = "ReadUser"
-        else:
-            output_user = username.capitalize() + "User"
         if not user_exists(cursor, username):
             statement = """CREATE USER {} IDENTIFIED WITH AWSAuthenticationPlugin AS 'RDS';""".format(username)
             logger.info(statement)
@@ -571,9 +569,6 @@ def add_db_user(cluster_properties, result, db_region, reapply=False):
         elif reapply is True:
             logger.info(grant_statement)
             cursor.execute(grant_statement)
-
-        result.data[output_user] = "arn:aws:rds-db:{}:{}:dbuser:{}/{}".format(region, account, cluster_id, username)
-        logger.info(result.data[output_user])
 
     rdsdb.close()
     return

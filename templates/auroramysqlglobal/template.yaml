@@ -1302,7 +1302,7 @@ Resources:
       - functions/generate_dbname/lambda_function.zip
       - functions/get_subnet_ids/lambda_function.zip
       - functions/get_sg/lambda_function.zip
-      - functions/rds_global1.3/lambda_function.zip
+      - functions/rds_global1.4/lambda_function.zip
       - layers/requests/lambda_layer.zip
       LambdaUpdate: !Ref LambdaUpdate
   AWSSBInjectedCopyZipsRole:
@@ -1623,7 +1623,7 @@ Resources:
         - Arn
       Code:
         S3Bucket: !Ref AWSSBInjectedLambdaZipsBucket
-        S3Key: functions/rds_global1.3/lambda_function.zip
+        S3Key: functions/rds_global1.4/lambda_function.zip
       Runtime: python3.8
       Timeout: '720'
       Layers:
