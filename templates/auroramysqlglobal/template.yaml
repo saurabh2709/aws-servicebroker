@@ -6,7 +6,7 @@ Description: 'AWS Service Broker - Global Amazon Aurora MySQL 5.6, 5.7 (qs-1pn9k
 ###############################################################################
 Metadata:
   AWS::ServiceBroker::Specification:
-    Version: 1.4
+    Version: 1.5
     Tags:
     - AWS
     - Aurora
@@ -75,7 +75,7 @@ Metadata:
           DBPort: 3306
           DBUsername: master
           MonitoringInterval: '60'
-          NumberofAuroraReplicas: '1'
+          NumberofAuroraReplicas: '0'
           StorageEncrypted: 'true'
           SkipFinalSnapshotOnDeletion: 'true'
       custom:
